@@ -10,6 +10,8 @@
   #info h1{margin:0;font-size:22px}
   #info p{margin:4px 0;font-size:14px;opacity:.85}
   #motionBtn{position:fixed;left:12px;bottom:14px;display:none;padding:12px 16px;font-size:15px;border:0;border-radius:24px;background:#1e88e5;color:#fff;box-shadow:0 2px 10px #0006}
+  #orbitUI{position:fixed;right:12px;bottom:14px;display:none;gap:10px;align-items:center;color:#fff;font-size:13px;text-shadow:0 0 6px #000}
+  #orbitUI button{width:60px;height:60px;border:0;border-radius:50%;font-size:26px;background:#1e88e5;color:#fff;box-shadow:0 2px 10px #0006;touch-action:none;user-select:none}
   #status{position:fixed;bottom:64px;left:0;right:0;text-align:center;font-size:13px;opacity:.7;pointer-events:none}
 </style>
 <script type="importmap">
@@ -27,6 +29,7 @@
   <p>Quest 3: press <b>ENTER VR</b> (hand tracking recommended). Phone: tap <b>Enable motion sensor</b>, look around and tap bubbles. Desktop: click bubbles.</p>
 </div>
 <div id="status">Loading models…</div>
+<div id="orbitUI"><button id="orbL">◀</button><span>walk<br>around</span><button id="orbR">▶</button></div>
 <button id="motionBtn">📱 Enable motion sensor</button>
 
 <script type="module">
@@ -430,13 +433,13 @@ function update(dt, time) {
 
 /* ───────────── Desktop mouse fallback ───────────── */
 renderer.domElement.addEventListener('click', e => {
-  if (renderer.xr.isPresenting) return;
+  if (renderer.xr.isPresenting || dragMoved) return;
   ray.setFromCamera(new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
   if (btn.visible && ray.intersectObject(btn, true).length) { startGame(); return; }
   const hit = ray.intersectObjects(bubbles.map(b => b.children[0]))[0];
   if (hit && state === 'playing') pop(hit.object.parent);
 });
-renderer.xr.addEventListener('sessionstart', () => { orbit.enabled = false; audio(); motionBtn.style.display = 'none'; });
+renderer.xr.addEventListener('sessionstart', () => { orbit.enabled = false; audio(); motionBtn.style.display = 'none'; orbitUI.style.display = 'none'; });
 renderer.xr.addEventListener('sessionend', () => { orbit.enabled = !gyroOn; });
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
@@ -462,8 +465,8 @@ motionBtn.addEventListener('click', async () => {
       if (r !== 'granted') { motionBtn.textContent = '⚠️ Motion blocked – allow it in browser settings'; return; } }
   } catch (err) { motionBtn.textContent = '⚠️ ' + (err.message || 'Motion permission failed'); return; }
   addEventListener('deviceorientation', onOrient, true);
-  gyroOn = true; orbit.enabled = false; motionBtn.textContent = '📱 Motion on (tap to re-centre)';
-  setTimeout(() => { if (!gotMotion) { gyroOn = false; orbit.enabled = true; removeEventListener('deviceorientation', onOrient, true);
+  gyroOn = true; orbit.enabled = false; orbitUI.style.display = 'flex'; motionBtn.textContent = '📱 Motion on (tap to re-centre)';
+  setTimeout(() => { if (!gotMotion) { gyroOn = false; orbit.enabled = true; orbitUI.style.display = 'none'; removeEventListener('deviceorientation', onOrient, true);
     motionBtn.textContent = '⚠️ No motion sensor found (needs HTTPS + a phone)'; } }, 2000);
 });
 if (matchMedia('(pointer:coarse)').matches) {
@@ -471,9 +474,28 @@ if (matchMedia('(pointer:coarse)').matches) {
   navigator.xr?.isSessionSupported?.('immersive-vr').then(ok => { if (ok) motionBtn.style.display = 'none'; }).catch(() => {});  // hide on headsets
 }
 
+/* ───────────── Walk around Charminar while in phone-motion mode ───────────── */
+const orbitUI = document.getElementById('orbitUI');
+let orbitA = 0, orbitV = 0, dragMoved = false, lastX = null, downX = 0;
+for (const [id, dir] of [['orbL', -1], ['orbR', 1]]) {
+  const b = document.getElementById(id);
+  b.addEventListener('pointerdown', e => { e.preventDefault(); orbitV = dir * .9; });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => { orbitV = 0; });
+}
+renderer.domElement.style.touchAction = 'none';
+renderer.domElement.addEventListener('pointerdown', e => { lastX = downX = e.clientX; dragMoved = false; });
+renderer.domElement.addEventListener('pointermove', e => {          // swipe sideways to circle the monument
+  if (lastX === null || !gyroOn) return;
+  if (Math.abs(e.clientX - downX) > 10) dragMoved = true;
+  orbitA -= (e.clientX - lastX) * .008; lastX = e.clientX; });
+addEventListener('pointerup', () => { lastX = null; });
+
 /* ───────────── Init ───────────── */
 const clock = new THREE.Clock();
-renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05); if (ready) update(dt, clock.elapsedTime); if (gyroOn && !renderer.xr.isPresenting) camera.quaternion.copy(gyroQ); renderer.render(scene, camera); });
+renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05); if (ready) update(dt, clock.elapsedTime); if (gyroOn && !renderer.xr.isPresenting) {
+      orbitA += orbitV * dt; const c = CFG.charminarPos;
+      camera.position.set(c.x + Math.sin(orbitA) * 1.9, 1.6, c.z + Math.cos(orbitA) * 1.9);   // circle Charminar
+      camera.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), orbitA).multiply(gyroQ); } renderer.render(scene, camera); });
 (async () => {
   const [a, b] = await Promise.all([loadModel(CFG.charminarFile), loadModel(CFG.ufoFile)]);
   const c = a || fallbackCharminar(); rot(c, CFG.charminarRot); cmModel = fit(c, CFG.charminarHeight, false); cm.add(cmModel);
