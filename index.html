@@ -39,8 +39,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 /* ───────────── SETTINGS (tweak freely) ───────────── */
 const CFG = {
-  charminarFile: 'models/charminar.gltf',   // .gltf, .glb or .fbx all work
-  ufoFile: 'models/ufo.fbx',
+  charminarFile: ['models/charminar.glb', 'models/charminar.gltf', 'models/charminar.fbx'],  // tried in order
+  ufoFile: ['models/ufo.glb', 'models/ufo.gltf', 'models/ufo.fbx'],
   charminarRot: [0, 0, 0],      // degrees [x,y,z] – use e.g. [-90,0,0] if the FBX is lying down
   ufoRot: [0, 0, 0],
   charminarHeight: 1.6,         // metres in VR (kept small so you can reach it)
@@ -112,9 +112,17 @@ const loader = new FBXLoader();
 const gltfLoader = new GLTFLoader()
   .setDRACOLoader(new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/'))
   .setMeshoptDecoder(MeshoptDecoder);
-const loadModel = async url => { try {
-    if (/\.(gltf|glb)$/i.test(url)) return (await gltfLoader.loadAsync(url)).scene;
-    return await loader.loadAsync(url); } catch (e) { console.warn('Could not load', url, e); return null; } };
+const loadErrors = [];
+async function loadModel(urls) {
+  const errs = [];
+  for (const url of [].concat(urls)) {
+    try {
+      const m = /\.(gltf|glb)$/i.test(url) ? (await gltfLoader.loadAsync(url)).scene : await loader.loadAsync(url);
+      console.log('Loaded', url); return m;
+    } catch (e) { errs.push(`${url}: ${e?.message || e}`); console.warn('Could not load', url, e); }
+  }
+  loadErrors.push(...errs); return null;
+}
 const rot = (o, r) => o.rotation.set(...r.map(d => THREE.MathUtils.degToRad(d)));
 
 function fit(obj, size, byWidth) {          // scale to target, centre on XZ, sit on y=0
@@ -396,6 +404,8 @@ renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05); if
   const u = b || fallbackUFO(); rot(u, CFG.ufoRot); ufoBody = fit(u, CFG.ufoWidth, true); ufo.add(ufoBody);
   document.getElementById('status').textContent =
     (a ? 'Charminar model loaded' : 'Charminar model not found – using placeholder') + ' · ' + (b ? 'UFO model loaded' : 'UFO model not found – using placeholder');
+  if (loadErrors.length) { const st = document.getElementById('status'); st.style.whiteSpace = 'pre-line'; st.style.color = '#ffd0d0';
+    st.style.background = 'rgba(120,0,0,.6)'; st.textContent += '\n' + loadErrors.join('\n'); }
   scene.updateMatrixWorld(true); ready = true; setState('menu');
 })();
 </script>
