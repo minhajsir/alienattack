@@ -31,12 +31,15 @@
 import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 /* ───────────── SETTINGS (tweak freely) ───────────── */
 const CFG = {
-  charminarFile: 'models/charminar.fbx',
+  charminarFile: 'models/charminar.gltf',   // .gltf, .glb or .fbx all work
   ufoFile: 'models/ufo.fbx',
   charminarRot: [0, 0, 0],      // degrees [x,y,z] – use e.g. [-90,0,0] if the FBX is lying down
   ufoRot: [0, 0, 0],
@@ -106,7 +109,12 @@ const ufo = new THREE.Group(); scene.add(ufo);
 let cmModel, ufoBody, ready = false, rayTarget, cmW = 1.2;
 
 const loader = new FBXLoader();
-const loadModel = async url => { try { return await loader.loadAsync(url); } catch (e) { console.warn('Could not load', url, e); return null; } };
+const gltfLoader = new GLTFLoader()
+  .setDRACOLoader(new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/'))
+  .setMeshoptDecoder(MeshoptDecoder);
+const loadModel = async url => { try {
+    if (/\.(gltf|glb)$/i.test(url)) return (await gltfLoader.loadAsync(url)).scene;
+    return await loader.loadAsync(url); } catch (e) { console.warn('Could not load', url, e); return null; } };
 const rot = (o, r) => o.rotation.set(...r.map(d => THREE.MathUtils.degToRad(d)));
 
 function fit(obj, size, byWidth) {          // scale to target, centre on XZ, sit on y=0
@@ -387,7 +395,7 @@ renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05); if
   }
   const u = b || fallbackUFO(); rot(u, CFG.ufoRot); ufoBody = fit(u, CFG.ufoWidth, true); ufo.add(ufoBody);
   document.getElementById('status').textContent =
-    (a ? 'Charminar FBX loaded' : 'Charminar FBX not found – using placeholder') + ' · ' + (b ? 'UFO FBX loaded' : 'UFO FBX not found – using placeholder');
+    (a ? 'Charminar model loaded' : 'Charminar model not found – using placeholder') + ' · ' + (b ? 'UFO model loaded' : 'UFO model not found – using placeholder');
   scene.updateMatrixWorld(true); ready = true; setState('menu');
 })();
 </script>
