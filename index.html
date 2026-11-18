@@ -14,7 +14,8 @@
 <script type="importmap">
 {"imports":{
   "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+  "three-mesh-bvh":"https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.3/build/index.module.js"
 }}
 </script>
 </head>
@@ -102,7 +103,7 @@ sunDisc.position.set(30, 45, -20).setLength(85); scene.add(sunDisc);
 /* ───────────── Models (with procedural fallbacks) ───────────── */
 const cm = new THREE.Group(); cm.position.copy(CFG.charminarPos); scene.add(cm);   // pivot: model + stuck bubbles
 const ufo = new THREE.Group(); scene.add(ufo);
-let cmModel, ufoBody, ready = false;
+let cmModel, ufoBody, ready = false, rayTarget, cmW = 1.2;
 
 const loader = new FBXLoader();
 const loadModel = async url => { try { return await loader.loadAsync(url); } catch (e) { console.warn('Could not load', url, e); return null; } };
@@ -165,10 +166,10 @@ function makeBubble() {
 }
 
 /* ───────────── Spawning onto the Charminar surface ───────────── */
-const ray = new THREE.Raycaster();
+const ray = new THREE.Raycaster(); ray.firstHitOnly = true;
 function pickTarget() {
   const H = CFG.charminarHeight, c = CFG.charminarPos, tmp = new THREE.Vector3();
-  const W = new THREE.Box3().setFromObject(cmModel).getSize(tmp).x;
+  const W = cmW;
   let best = null;
   for (let k = 0; k < 8; k++) {
     const az = (Math.random() * 2 - 1) * THREE.MathUtils.degToRad(CFG.frontArc);
@@ -176,7 +177,7 @@ function pickTarget() {
     const origin = new THREE.Vector3(c.x + Math.sin(az) * 3 + Math.cos(az) * lat, y, c.z + Math.cos(az) * 3 - Math.sin(az) * lat);
     const dir = new THREE.Vector3(-Math.sin(az), 0, -Math.cos(az));
     ray.set(origin, dir);
-    const hit = ray.intersectObject(cmModel, true).find(h => h.face);
+    const hit = ray.intersectObject(rayTarget, true).find(h => h.face);
     if (!hit) continue;
     const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
     if (n.dot(dir) > 0) n.negate();
@@ -369,6 +370,21 @@ renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05); if
 (async () => {
   const [a, b] = await Promise.all([loadModel(CFG.charminarFile), loadModel(CFG.ufoFile)]);
   const c = a || fallbackCharminar(); rot(c, CFG.charminarRot); cmModel = fit(c, CFG.charminarHeight, false); cm.add(cmModel);
+  // Fast ray-casting: build a BVH per mesh (a raw ray test on a big FBX freezes the page)
+  cmModel.updateMatrixWorld(true);
+  const bb = new THREE.Box3().setFromObject(cmModel), bs = bb.getSize(new THREE.Vector3()); cmW = bs.x; rayTarget = cmModel;
+  let tris = 0;
+  try {
+    const B = await import('three-mesh-bvh');
+    cmModel.traverse(o => { if (o.isMesh && o.geometry) {
+      o.geometry.boundsTree = new B.MeshBVH(o.geometry, { maxLeafTris: 10 }); o.raycast = B.acceleratedRaycast;
+      tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; } });
+    console.log('Charminar triangles:', Math.round(tris));
+  } catch (e) {   // fallback: cheap box proxy so the game never freezes
+    console.warn('BVH unavailable, using box proxy', e);
+    rayTarget = new THREE.Mesh(new THREE.BoxGeometry(bs.x * .85, bs.y, bs.z * .85));
+    rayTarget.position.copy(bb.getCenter(new THREE.Vector3())); rayTarget.updateMatrixWorld(true);
+  }
   const u = b || fallbackUFO(); rot(u, CFG.ufoRot); ufoBody = fit(u, CFG.ufoWidth, true); ufo.add(ufoBody);
   document.getElementById('status').textContent =
     (a ? 'Charminar FBX loaded' : 'Charminar FBX not found – using placeholder') + ' · ' + (b ? 'UFO FBX loaded' : 'UFO FBX not found – using placeholder');
