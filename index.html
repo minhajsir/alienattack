@@ -26,7 +26,7 @@
 <div id="info">
   <h1>🛸 Save Charminar!</h1>
   <p>Aliens are sticking to Charminar. Smash <b>70</b> bubbles with your hands before <b>100</b> are on it.</p>
-  <p>Quest 3: press <b>ENTER VR</b> (hand tracking recommended). Phone: tap <b>Enable motion sensor</b>, look around and tap bubbles. Desktop: click bubbles.</p>
+  <p>Quest 3: press <b>ENTER VR</b> Right hand = shotgun (trigger or pinch to fire). Left hand = hold grip or pinch and swing sideways (or use the thumbstick) to spin Charminar. Phone: tap <b>Enable motion sensor</b>, look around and tap bubbles. Desktop: click bubbles.</p>
 </div>
 <div id="status">Loading models…</div>
 <div id="orbitUI"><button id="orbL">◀</button><span>walk<br>around</span><button id="orbR">▶</button></div>
@@ -55,6 +55,7 @@ const CFG = {
   bubbleR: 0.065,
   winAt: 70,
   loseAt: 100,
+  gunHand: 'right',             // which hand holds the shotgun ('left' for left-handers)
   frontArc: 115                 // degrees either side of the front where bubbles may stick
 };
 
@@ -326,12 +327,124 @@ function collectPokers() {
 }
 const buzz = s => s?.gamepad?.hapticActuators?.[0]?.pulse?.(.6, 40);
 
+/* ───────────── Shotgun (gun hand) + grab-to-spin (other hand) ───────────── */
+const shotMat = new THREE.MeshBasicMaterial({ color: 0xffd36b });
+const tracerGeo = new THREE.BoxGeometry(.008, .008, 1).translate(0, 0, .5), tracers = [];
+const V1 = new THREE.Vector3(), V2 = new THREE.Vector3(), Q1 = new THREE.Quaternion();
+let gunCtl = null, turnCtl = null, grab = null, lastShot = 0;
+
+function makeGun() {
+  const g = new THREE.Group(),
+    dark = new THREE.MeshStandardMaterial({ color: 0x2b2b30, metalness: .7, roughness: .35 }),
+    wood = new THREE.MeshStandardMaterial({ color: 0x7a4a24, roughness: .7 });
+  const part = (geo, mat, x, y, z, rx = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.x = rx; g.add(m); return m; };
+  part(new THREE.CylinderGeometry(.016, .016, .5, 12), dark, 0, .02, -.3, Math.PI / 2);     // barrel (muzzle at z = -0.55)
+  part(new THREE.CylinderGeometry(.02, .02, .26, 12), wood, 0, -.012, -.22, Math.PI / 2);   // pump
+  part(new THREE.BoxGeometry(.05, .07, .2), dark, 0, 0, -.02);                               // receiver
+  part(new THREE.BoxGeometry(.04, .1, .04), wood, 0, -.07, .03, .3);                         // grip
+  part(new THREE.BoxGeometry(.045, .08, .22), wood, 0, -.005, .17, -.1);                     // stock
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(.05, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: .9 }));
+  flash.position.z = -.6; flash.visible = false; g.add(flash);
+  const laser = new THREE.Mesh(new THREE.BoxGeometry(.003, .003, 3).translate(0, 0, -1.5),
+    new THREE.MeshBasicMaterial({ color: 0xff3030, transparent: true, opacity: .5, depthWrite: false }));
+  laser.position.set(0, .02, -.56); g.add(laser);
+  g.userData = { kick: 0, flashT: 0, flash };
+  return g;
+}
+const ctls = [0, 1].map(i => {
+  const c = renderer.xr.getController(i); c.userData.idx = i; scene.add(c);
+  const gun = makeGun(); gun.visible = false; c.add(gun); c.userData.gun = gun;
+  c.addEventListener('connected', e => { c.userData.src = e.data; c.userData.handed = e.data.handedness; refreshRoles(); });
+  c.addEventListener('disconnected', () => { c.userData.src = null; c.userData.handed = null; if (grab?.c === c) grab = null; refreshRoles(); });
+  c.addEventListener('selectstart', () => onPress(c, true, true));
+  c.addEventListener('selectend', () => onPress(c, false, true));
+  c.addEventListener('squeezestart', () => onPress(c, true, false));
+  c.addEventListener('squeezeend', () => onPress(c, false, false));
+  return c;
+});
+function refreshRoles() {
+  const on = ctls.filter(c => c.userData.src);
+  gunCtl = on.find(c => c.userData.handed === CFG.gunHand) || on[0] || null;
+  turnCtl = on.find(c => c !== gunCtl) || null;
+  ctls.forEach(c => c.userData.gun.visible = c === gunCtl);
+  if (grab && grab.c !== turnCtl) grab = null;
+}
+function grabPos(c, out) {            // wrist for tracked hands, controller position otherwise
+  const w = hands[c.userData.idx]?.joints?.['wrist'];
+  return c.userData.src?.hand && w ? w.getWorldPosition(out) : c.getWorldPosition(out);
+}
+function onPress(c, down, isSelect) {
+  if (!ready) return; audio();
+  if (c === gunCtl) { if (down && isSelect) shoot(c); }
+  else if (c === turnCtl) {
+    if (down) { const p = grabPos(c, V1); grab = { c, a: Math.atan2(p.x - cm.position.x, p.z - cm.position.z) }; buzz(c.userData.src); }
+    else if (grab?.c === c) grab = null;
+  }
+}
+
+function sfxShot() {
+  if (!actx) return; const t = actx.currentTime, n = actx.sampleRate * .3 | 0, buf = actx.createBuffer(1, n, actx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
+  const src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+  src.buffer = buf; f.type = 'lowpass'; f.frequency.value = 1800; g.gain.value = .7; src.connect(f).connect(g).connect(actx.destination); src.start(t);
+  const o = actx.createOscillator(), og = actx.createGain();
+  o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(40, t + .2);
+  og.gain.setValueAtTime(.6, t); og.gain.exponentialRampToValueAtTime(.001, t + .22); o.connect(og).connect(actx.destination); o.start(t); o.stop(t + .25);
+}
+
+function shoot(c) {
+  const now = performance.now() / 1000; if (now - lastShot < .45) return; lastShot = now;       // pump-action delay
+  const gun = c.userData.gun, quat = c.getWorldQuaternion(Q1.clone()), origin = c.localToWorld(new THREE.Vector3(0, 0, -.58));
+  gun.userData.kick = 1; gun.userData.flashT = .06; sfxShot(); c.userData.src?.gamepad?.hapticActuators?.[0]?.pulse?.(1, 90);
+
+  const aim = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
+  if (btn.visible && clock.elapsedTime > btnReadyAt) {                      // shoot the START / PLAY AGAIN ball
+    const bp = btn.getWorldPosition(V2).sub(origin), t = bp.dot(aim);
+    if (t > 0 && bp.lengthSq() - t * t < .18 ** 2) { startGame(); return; }
+  }
+  if (state !== 'playing') return;
+
+  const wps = bubbles.map(b => b.getWorldPosition(new THREE.Vector3())), popped = new Set();
+  for (let p = 0; p < 9; p++) {                                              // 9 pellets: 1 centre + 8 spread
+    const dir = new THREE.Vector3(0, 0, -1);
+    if (p) { const r = .11 * Math.sqrt(Math.random()), a = Math.random() * 6.283; dir.set(Math.cos(a) * r, Math.sin(a) * r, -1).normalize(); }
+    dir.applyQuaternion(quat);
+    ray.set(origin, dir); const surf = ray.intersectObject(rayTarget, true)[0]?.distance ?? Infinity;   // can't shoot through Charminar
+    let best = -1, bt = Infinity;
+    for (let i = 0; i < bubbles.length; i++) {
+      if (popped.has(i)) continue;
+      const v = V2.copy(wps[i]).sub(origin), t = v.dot(dir), rr = R * bubbles[i].scale.x * 1.2;
+      if (t > 0 && t < bt && t < surf + R * 1.5 && v.lengthSq() - t * t < rr * rr) { best = i; bt = t; }
+    }
+    const len = best >= 0 ? bt : Math.min(surf, 6);
+    const m = new THREE.Mesh(tracerGeo, shotMat); m.position.copy(origin); m.lookAt(origin.clone().add(dir)); m.scale.z = len; scene.add(m); tracers.push({ m, life: .08 });
+    if (best >= 0) popped.add(best);
+  }
+  const hit = [...popped].map(i => bubbles[i]); hit.forEach(b => pop(b));   // pop() updates score + sound
+}
+
+function vrUpdate(dt) {
+  for (let i = tracers.length - 1; i >= 0; i--) { const t = tracers[i]; t.life -= dt; t.m.scale.x = t.m.scale.y = Math.max(t.life / .08, .01);
+    if (t.life <= 0) { scene.remove(t.m); tracers.splice(i, 1); } }
+  if (!renderer.xr.isPresenting) return;
+  grips.forEach((g, i) => { g.children[0].visible = !!(g.userData.src && !g.userData.src.hand) && ctls[i] !== gunCtl; });   // gun replaces the orb
+  const gu = gunCtl?.userData.gun;
+  if (gu) { const u = gu.userData; u.kick = Math.max(0, u.kick - dt * 4); gu.position.z = u.kick * .07; gu.rotation.x = u.kick * .3; u.flashT -= dt; u.flash.visible = u.flashT > 0; }
+  if (state === 'lost') return;
+  if (grab) {                                                                // turntable: Charminar follows your hand around it
+    const p = grabPos(grab.c, V1), dx = p.x - cm.position.x, dz = p.z - cm.position.z;
+    if (Math.hypot(dx, dz) > .15) { const a = Math.atan2(dx, dz), d = a - grab.a; cm.rotation.y += Math.atan2(Math.sin(d), Math.cos(d)); grab.a = a; }
+  }
+  for (const c of ctls) { const gp = c.userData.src?.gamepad;                // thumbstick also spins it
+    if (gp && !c.userData.src.hand) { const x = gp.axes[2] ?? gp.axes[0] ?? 0; if (Math.abs(x) > .2) cm.rotation.y += x * dt * 1.8; } }
+}
+
 /* ───────────── HUD + start button ───────────── */
 const hudC = Object.assign(document.createElement('canvas'), { width: 512, height: 288 }), hx = hudC.getContext('2d');
 const hudTex = new THREE.CanvasTexture(hudC); hudTex.colorSpace = THREE.SRGBColorSpace;
 const hud = new THREE.Mesh(new THREE.PlaneGeometry(.8, .45), new THREE.MeshBasicMaterial({ map: hudTex, toneMapped: false }));
 hud.position.set(-1, 1.35, -.8); hud.lookAt(0, 1.4, .3); scene.add(hud);
-const MSG = { menu: 'Poke START to begin', arriving: '🛸 UFO INCOMING!', playing: 'SMASH THE ALIENS!', won: 'CHARMINAR SAVED!', lost: 'GAME OVER – ABDUCTED!' };
+const MSG = { menu: 'Shoot or poke START', arriving: '🛸 UFO INCOMING!', playing: 'SMASH THE ALIENS!', won: 'CHARMINAR SAVED!', lost: 'GAME OVER – ABDUCTED!' };
 let hudKey = '';
 function bar(x, y, w, h, f, col) { hx.fillStyle = '#223'; hx.fillRect(x, y, w, h); hx.fillStyle = col; hx.fillRect(x, y, w * Math.min(f, 1), h); }
 function drawHUD() {
@@ -375,7 +488,7 @@ function endGame(s) {
 }
 
 function update(dt, time) {
-  tState += dt; collectPokers();
+  tState += dt; collectPokers(); vrUpdate(dt);
   if (ufoBody) ufoBody.rotation.y += dt * (state === 'won' ? 10 : 1.2);
   ufoLight.intensity = ufo.visible && state !== 'menu' ? 1.6 : 0; ufoLight.position.copy(ufo.position).y -= .3;
 

@@ -34,3 +34,9 @@ GitHub Pages is HTTPS, which WebXR requires.
 ## Desktop testing
 Open the page in a normal browser: drag to orbit, click START, click bubbles.
 Serve locally with `python3 -m http.server` (FBX can't load from `file://`).
+
+## VR controls (Quest 3)
+- **Right hand = shotgun.** Trigger (controllers) or pinch (hand tracking) fires 9 pellets with a short pump delay. A red laser shows your aim. You can also shoot the START / PLAY AGAIN ball.
+- **Left hand = spin Charminar.** Hold the grip button (or pinch with a tracked hand) and swing your hand around the model like a turntable. The left thumbstick also spins it.
+- Touching bubbles with a hand still pops them.
+- Left-handed? Set `gunHand: 'left'` in `CFG`.
