@@ -12,6 +12,9 @@
   #motionBtn{position:fixed;left:12px;bottom:14px;display:none;padding:12px 16px;font-size:15px;border:0;border-radius:24px;background:#1e88e5;color:#fff;box-shadow:0 2px 10px #0006}
   #orbitUI{position:fixed;right:12px;bottom:14px;display:none;gap:10px;align-items:center;color:#fff;font-size:13px;text-shadow:0 0 6px #000}
   #orbitUI button{width:60px;height:60px;border:0;border-radius:50%;font-size:26px;background:#1e88e5;color:#fff;box-shadow:0 2px 10px #0006;touch-action:none;user-select:none}
+  .tb{position:fixed;right:12px;padding:8px 14px;border:0;border-radius:20px;background:#0008;color:#fff;font-size:14px}
+  #exitBtn{top:12px;background:#d32f2f}
+  #musicBtn{top:56px}
   #status{position:fixed;bottom:64px;left:0;right:0;text-align:center;font-size:13px;opacity:.7;pointer-events:none}
 </style>
 <script type="importmap">
@@ -29,6 +32,7 @@
   <p>Quest 3: press <b>ENTER VR</b> Right hand = shotgun (trigger or pinch to fire). Left hand = hold grip or pinch and swing sideways (or use the thumbstick) to spin Charminar. Phone: tap <b>Enable motion sensor</b>, look around and tap bubbles. Desktop: click bubbles.</p>
 </div>
 <div id="status">Loading models…</div>
+<button class="tb" id="exitBtn">✕ Exit</button><button class="tb" id="musicBtn">🔊 Music</button>
 <div id="orbitUI"><button id="orbL">◀</button><span>walk<br>around</span><button id="orbR">▶</button></div>
 <button id="motionBtn">📱 Enable motion sensor</button>
 
@@ -49,7 +53,9 @@ const CFG = {
   charminarRot: [0, 0, 0],      // degrees [x,y,z] – use e.g. [-90,0,0] if the FBX is lying down
   ufoRot: [0, 0, 0],
   charminarHeight: 1.6,         // metres in VR (kept small so you can reach it)
-  charminarPos: new THREE.Vector3(0, 0, -1.1), // in front of you, floor level
+  charminarPos: new THREE.Vector3(0, 0, 0),   // centre of the scaled world
+  worldScale: 10,               // Charminar / UFO / aliens are 10x bigger than the player
+  playerDistance: 32,           // metres the player stands from Charminar
   ufoWidth: 1.3,
   ufoHover: 0.9,                // gap above Charminar's top
   bubbleR: 0.065,
@@ -72,24 +78,26 @@ document.body.appendChild(VRButton.createButton(renderer, {
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xbfe6ff);
-scene.fog = new THREE.Fog(0xcfeaff, 12, 55);
-const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.02, 120);
-camera.position.set(0, 1.6, 0.8);
+scene.fog = new THREE.Fog(0xcfeaff, 120, 800);
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 2500);
+camera.position.set(0, 1.7, 0);
 const orbit = new OrbitControls(camera, renderer.domElement);
-orbit.target.set(0, 1, -1.1);
+orbit.target.set(0, CFG.charminarHeight * CFG.worldScale * .4, -CFG.playerDistance);
 orbit.update();
+// Everything in the game (Charminar, UFO, aliens, scenery, sky) lives in `world`, scaled up so the player (you) is ~10x smaller.
+const world = new THREE.Group(); world.scale.setScalar(CFG.worldScale); world.position.set(0, 0, -CFG.playerDistance); scene.add(world);
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x88aa66, 1.5));
 const sun = new THREE.DirectionalLight(0xfff2d0, 2.4); sun.position.set(30, 45, -20); scene.add(sun);
-const ufoLight = new THREE.PointLight(0x66ff99, 0, 5); scene.add(ufoLight);
+const ufoLight = new THREE.PointLight(0x66ff99, 0, 50); world.add(ufoLight);
 
 // Ground: grass + stone plaza around Charminar
 const ground = new THREE.Mesh(new THREE.CircleGeometry(90, 64).rotateX(-Math.PI / 2),
   new THREE.MeshStandardMaterial({ color: 0x5aa84a, roughness: 1 }));
-scene.add(ground);
+world.add(ground);
 const plaza = new THREE.Mesh(new THREE.CircleGeometry(2.4, 48).rotateX(-Math.PI / 2),
   new THREE.MeshStandardMaterial({ color: 0xd9c9a3, roughness: .9 }));
-plaza.position.set(CFG.charminarPos.x, 0.004, CFG.charminarPos.z); scene.add(plaza);
+plaza.position.set(CFG.charminarPos.x, 0.004, CFG.charminarPos.z); world.add(plaza);
 
 // Sky dome (gradient), sun and clouds
 const sky = new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), new THREE.ShaderMaterial({
@@ -98,15 +106,15 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), new THREE.Shad
   vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
   fragmentShader: 'uniform vec3 top; uniform vec3 hor; varying vec3 vP; void main(){ float h = max(normalize(vP).y,0.); gl_FragColor = vec4(mix(hor, top, pow(h,.55)),1.); }'
 }));
-scene.add(sky);
+world.add(sky);
 const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(4, 24, 16), new THREE.MeshBasicMaterial({ color: 0xfff3b0, fog: false }));
-sunDisc.position.set(30, 45, -20).setLength(85); scene.add(sunDisc);
+sunDisc.position.set(30, 45, -20).setLength(85); world.add(sunDisc);
 { const cm_ = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .92, fog: false });
   for (let i = 0; i < 10; i++) {
     const c = new THREE.Group(), a = Math.random() * 6.283, d = 35 + Math.random() * 35;
     for (let j = 0; j < 5; j++) { const p = new THREE.Mesh(new THREE.SphereGeometry(2 + Math.random() * 2.5, 12, 8), cm_);
       p.position.set(j * 3 - 6 + Math.random(), Math.random(), Math.random() * 2); p.scale.y = .55; c.add(p); }
-    c.position.set(Math.cos(a) * d, 22 + Math.random() * 14, Math.sin(a) * d); c.lookAt(0, c.position.y, 0); scene.add(c);
+    c.position.set(Math.cos(a) * d, 22 + Math.random() * 14, Math.sin(a) * d); c.lookAt(0, c.position.y, 0); world.add(c);
   } }
 
 // Scenery: ring road, small buildings (with windows + domes) and trees – all instanced (a few draw calls)
@@ -114,11 +122,11 @@ sunDisc.position.set(30, 45, -20).setLength(85); scene.add(sunDisc);
   let seed = 7; const rnd = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
     t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
   const C = CFG.charminarPos, taken = [];
-  const free = (x, z, r) => Math.hypot(x, z) > 2.2 + r && taken.every(t => Math.hypot(t.x - x, t.z - z) > t.r + r);
+  const free = (x, z, r) => Math.hypot(x, z - CFG.playerDistance / CFG.worldScale) > 1.6 + r && taken.every(t => Math.hypot(t.x - x, t.z - z) > t.r + r);
   const road = new THREE.Mesh(new THREE.RingGeometry(2.4, 3.3, 64).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x555a62, roughness: 1 }));
-  road.position.set(C.x, .003, C.z); scene.add(road);
+  road.position.set(C.x, .003, C.z); world.add(road);
 
-  const inst = (geo, mat, n) => { const m = new THREE.InstancedMesh(geo, mat, n); scene.add(m); return m; };
+  const inst = (geo, mat, n) => { const m = new THREE.InstancedMesh(geo, mat, n); world.add(m); return m; };
   const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0), S = new THREE.Vector3(), P = new THREE.Vector3(), COL = new THREE.Color();
 
   // buildings (all lower than Charminar's 1.6 m)
@@ -168,8 +176,8 @@ sunDisc.position.set(30, 45, -20).setLength(85); scene.add(sunDisc);
 })();
 
 /* ───────────── Models (with procedural fallbacks) ───────────── */
-const cm = new THREE.Group(); cm.position.copy(CFG.charminarPos); scene.add(cm);   // pivot: model + stuck bubbles
-const ufo = new THREE.Group(); scene.add(ufo);
+const cm = new THREE.Group(); cm.position.copy(CFG.charminarPos); world.add(cm);   // pivot: model + stuck bubbles
+const ufo = new THREE.Group(); world.add(ufo);
 let cmModel, ufoBody, ready = false, rayTarget, cmW = 1.2;
 
 const loader = new FBXLoader();
@@ -229,7 +237,7 @@ function fallbackUFO() {
 /* ───────────── Bubble assets ───────────── */
 const R = CFG.bubbleR;
 const bGeo = new THREE.SphereGeometry(R, 20, 14), eyeGeo = new THREE.SphereGeometry(R * .26, 10, 8),
-      pupGeo = new THREE.SphereGeometry(R * .13, 8, 6), pGeo = new THREE.SphereGeometry(.012, 6, 4);
+      pupGeo = new THREE.SphereGeometry(R * .13, 8, 6), pGeo = new THREE.SphereGeometry(.02, 6, 4);
 const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff }), pupMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
 const bMats = [0x39ff88, 0x66e0ff, 0xff6fd8, 0xd6ff3a].map(c => new THREE.MeshStandardMaterial({
   color: c, emissive: c, emissiveIntensity: .35, transparent: true, opacity: .75, roughness: .15 }));
@@ -256,12 +264,12 @@ function pickTarget() {
     const lat = (Math.random() - .5) * W * .9, y = H * (.06 + Math.random() * .9);
     const origin = new THREE.Vector3(c.x + Math.sin(az) * 3 + Math.cos(az) * lat, y, c.z + Math.cos(az) * 3 - Math.sin(az) * lat);
     const dir = new THREE.Vector3(-Math.sin(az), 0, -Math.cos(az));
-    ray.set(origin, dir);
+    ray.set(world.localToWorld(origin.clone()), dir);
     const hit = ray.intersectObject(rayTarget, true).find(h => h.face);
     if (!hit) continue;
     const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
     if (n.dot(dir) > 0) n.negate();
-    const pos = hit.point.clone().addScaledVector(n, R * .7);
+    const pos = world.worldToLocal(hit.point.clone()).addScaledVector(n, R * .7);
     best = { pos, normal: n };
     if (!bubbles.some(b => b.userData.to.distanceTo(pos) < R * 1.3)) break;   // prefer free spots
   }
@@ -273,13 +281,13 @@ function spawnBubble() {
   b.position.copy(ufo.position).add(new THREE.Vector3((Math.random() - .5) * .3, -.1, (Math.random() - .5) * .3));
   b.scale.setScalar(.2);
   b.userData = { state: 'fly', t: 0, dur: 1 + Math.random() * .6, from: b.position.clone(), to: t.pos, phase: Math.random() * 6.28 };
-  scene.add(b); b.lookAt(t.pos.clone().add(t.normal));
+  world.add(b); b.lookAt(world.localToWorld(t.pos.clone().add(t.normal)));
   bubbles.push(b);
 }
 
 /* ───────────── Audio ───────────── */
 let actx;
-const audio = () => { actx ??= new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); };
+const audio = () => { actx ??= new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); startMusic(); };
 document.addEventListener('click', audio);
 function sfxPop() {
   if (!actx) return; const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
@@ -296,10 +304,10 @@ function jingle(freqs, type, step) {
 
 /* ───────────── Pop / particles ───────────── */
 function pop(b, silent) {
-  const wp = b.getWorldPosition(new THREE.Vector3()), mat = b.children[0].material;
+  const wp = world.worldToLocal(b.getWorldPosition(new THREE.Vector3())), mat = b.children[0].material;
   b.parent.remove(b); bubbles.splice(bubbles.indexOf(b), 1);
   for (let i = 0; i < 9; i++) {
-    const m = new THREE.Mesh(pGeo, mat); m.position.copy(wp); scene.add(m);
+    const m = new THREE.Mesh(pGeo, mat); m.position.copy(wp); world.add(m);
     parts.push({ m, life: .5, v: new THREE.Vector3(Math.random() - .5, Math.random() - .2, Math.random() - .5).multiplyScalar(1.6) });
   }
   if (!silent) { sfxPop(); smashed++; }
@@ -329,7 +337,7 @@ const buzz = s => s?.gamepad?.hapticActuators?.[0]?.pulse?.(.6, 40);
 
 /* ───────────── Shotgun (gun hand) + grab-to-spin (other hand) ───────────── */
 const shotMat = new THREE.MeshBasicMaterial({ color: 0xffd36b });
-const tracerGeo = new THREE.BoxGeometry(.008, .008, 1).translate(0, 0, .5), tracers = [];
+const tracerGeo = new THREE.BoxGeometry(.1, .1, 1).translate(0, 0, .5), tracers = [];
 const V1 = new THREE.Vector3(), V2 = new THREE.Vector3(), Q1 = new THREE.Quaternion();
 let gunCtl = null, turnCtl = null, grab = null, lastShot = 0;
 
@@ -345,7 +353,7 @@ function makeGun() {
   part(new THREE.BoxGeometry(.045, .08, .22), wood, 0, -.005, .17, -.1);                     // stock
   const flash = new THREE.Mesh(new THREE.SphereGeometry(.05, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: .9 }));
   flash.position.z = -.6; flash.visible = false; g.add(flash);
-  const laser = new THREE.Mesh(new THREE.BoxGeometry(.003, .003, 3).translate(0, 0, -1.5),
+  const laser = new THREE.Mesh(new THREE.BoxGeometry(.004, .004, 60).translate(0, 0, -30),
     new THREE.MeshBasicMaterial({ color: 0xff3030, transparent: true, opacity: .5, depthWrite: false }));
   laser.position.set(0, .02, -.56); g.add(laser);
   g.userData = { kick: 0, flashT: 0, flash };
@@ -377,7 +385,7 @@ function onPress(c, down, isSelect) {
   if (!ready) return; audio();
   if (c === gunCtl) { if (down && isSelect) shoot(c); }
   else if (c === turnCtl) {
-    if (down) { const p = grabPos(c, V1); grab = { c, a: Math.atan2(p.x - cm.position.x, p.z - cm.position.z) }; buzz(c.userData.src); }
+    if (down) { grab = { c, p: grabPos(c, new THREE.Vector3()) }; buzz(c.userData.src); }
     else if (grab?.c === c) grab = null;
   }
 }
@@ -398,23 +406,22 @@ function shoot(c) {
   gun.userData.kick = 1; gun.userData.flashT = .06; sfxShot(); c.userData.src?.gamepad?.hapticActuators?.[0]?.pulse?.(1, 90);
 
   const aim = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
-  if (btn.visible && clock.elapsedTime > btnReadyAt) {                      // shoot the START / PLAY AGAIN ball
-    const bp = btn.getWorldPosition(V2).sub(origin), t = bp.dot(aim);
-    if (t > 0 && bp.lengthSq() - t * t < .18 ** 2) { startGame(); return; }
-  }
+  for (const b of uiButtons) { if (!b.visible) continue;                    // shoot START / EXIT / MUSIC
+    const bp = b.getWorldPosition(V2).sub(origin), t = bp.dot(aim);
+    if (t > 0 && bp.lengthSq() - t * t < (b.userData.r + .08) ** 2 && pressUI(b)) return; }
   if (state !== 'playing') return;
 
   const wps = bubbles.map(b => b.getWorldPosition(new THREE.Vector3())), popped = new Set();
-  for (let p = 0; p < 9; p++) {                                              // 9 pellets: 1 centre + 8 spread
+  for (let p = 0; p < 12; p++) {                                              // 9 pellets: 1 centre + 8 spread
     const dir = new THREE.Vector3(0, 0, -1);
-    if (p) { const r = .11 * Math.sqrt(Math.random()), a = Math.random() * 6.283; dir.set(Math.cos(a) * r, Math.sin(a) * r, -1).normalize(); }
+    if (p) { const r = .061 * Math.sqrt(Math.random()), a = Math.random() * 6.283; dir.set(Math.cos(a) * r, Math.sin(a) * r, -1).normalize(); }
     dir.applyQuaternion(quat);
     ray.set(origin, dir); const surf = ray.intersectObject(rayTarget, true)[0]?.distance ?? Infinity;   // can't shoot through Charminar
     let best = -1, bt = Infinity;
     for (let i = 0; i < bubbles.length; i++) {
       if (popped.has(i)) continue;
-      const v = V2.copy(wps[i]).sub(origin), t = v.dot(dir), rr = R * bubbles[i].scale.x * 1.2;
-      if (t > 0 && t < bt && t < surf + R * 1.5 && v.lengthSq() - t * t < rr * rr) { best = i; bt = t; }
+      const v = V2.copy(wps[i]).sub(origin), t = v.dot(dir), rr = R * CFG.worldScale * bubbles[i].scale.x * 1.2;
+      if (t > 0 && t < bt && t < surf + R * CFG.worldScale * 1.5 && v.lengthSq() - t * t < rr * rr) { best = i; bt = t; }
     }
     const len = best >= 0 ? bt : Math.min(surf, 6);
     const m = new THREE.Mesh(tracerGeo, shotMat); m.position.copy(origin); m.lookAt(origin.clone().add(dir)); m.scale.z = len; scene.add(m); tracers.push({ m, life: .08 });
@@ -431,9 +438,10 @@ function vrUpdate(dt) {
   const gu = gunCtl?.userData.gun;
   if (gu) { const u = gu.userData; u.kick = Math.max(0, u.kick - dt * 4); gu.position.z = u.kick * .07; gu.rotation.x = u.kick * .3; u.flashT -= dt; u.flash.visible = u.flashT > 0; }
   if (state === 'lost') return;
-  if (grab) {                                                                // turntable: Charminar follows your hand around it
-    const p = grabPos(grab.c, V1), dx = p.x - cm.position.x, dz = p.z - cm.position.z;
-    if (Math.hypot(dx, dz) > .15) { const a = Math.atan2(dx, dz), d = a - grab.a; cm.rotation.y += Math.atan2(Math.sin(d), Math.cos(d)); grab.a = a; }
+  if (grab) {                                      // sweep your hand sideways = spin Charminar like a turntable
+    const p = grabPos(grab.c, V1); camera.getWorldDirection(V2); V2.y = 0;
+    if (V2.lengthSq() > 1e-4) { V2.normalize(); cm.rotation.y += ((p.x - grab.p.x) * -V2.z + (p.z - grab.p.z) * V2.x) * 3.5; }
+    grab.p.copy(p);
   }
   for (const c of ctls) { const gp = c.userData.src?.gamepad;                // thumbstick also spins it
     if (gp && !c.userData.src.hand) { const x = gp.axes[2] ?? gp.axes[0] ?? 0; if (Math.abs(x) > .2) cm.rotation.y += x * dt * 1.8; } }
@@ -443,7 +451,7 @@ function vrUpdate(dt) {
 const hudC = Object.assign(document.createElement('canvas'), { width: 512, height: 288 }), hx = hudC.getContext('2d');
 const hudTex = new THREE.CanvasTexture(hudC); hudTex.colorSpace = THREE.SRGBColorSpace;
 const hud = new THREE.Mesh(new THREE.PlaneGeometry(.8, .45), new THREE.MeshBasicMaterial({ map: hudTex, toneMapped: false }));
-hud.position.set(-1, 1.35, -.8); hud.lookAt(0, 1.4, .3); scene.add(hud);
+const ui = new THREE.Group(); scene.add(ui); hud.position.set(0, .22, 0); ui.add(hud);   // UI follows where you look
 const MSG = { menu: 'Shoot or poke START', arriving: '🛸 UFO INCOMING!', playing: 'SMASH THE ALIENS!', won: 'CHARMINAR SAVED!', lost: 'GAME OVER – ABDUCTED!' };
 let hudKey = '';
 function bar(x, y, w, h, f, col) { hx.fillStyle = '#223'; hx.fillRect(x, y, w, h); hx.fillStyle = col; hx.fillRect(x, y, w * Math.min(f, 1), h); }
@@ -458,16 +466,32 @@ function drawHUD() {
   hx.fillStyle = '#ffe066'; hx.font = 'bold 30px system-ui'; hx.textAlign = 'center'; hx.fillText(MSG[state] || '', 256, 245);
   hudTex.needsUpdate = true;
 }
-const lblC = Object.assign(document.createElement('canvas'), { width: 256, height: 64 }), lx = lblC.getContext('2d');
-const lblTex = new THREE.CanvasTexture(lblC); lblTex.colorSpace = THREE.SRGBColorSpace;
-function setLabel(t) { lx.clearRect(0, 0, 256, 64); lx.fillStyle = '#fff'; lx.font = 'bold 40px system-ui'; lx.textAlign = 'center';
-  lx.shadowColor = '#000'; lx.shadowBlur = 6; lx.fillText(t, 128, 46); lblTex.needsUpdate = true; }
-const btn = new THREE.Group(); btn.position.set(1, 1.2, -.7); scene.add(btn);
-btn.add(new THREE.Mesh(new THREE.SphereGeometry(.1, 24, 16), new THREE.MeshStandardMaterial({ color: 0x39ff88, emissive: 0x39ff88, emissiveIntensity: .6 })));
-const lbl = new THREE.Sprite(new THREE.SpriteMaterial({ map: lblTex, transparent: true, depthTest: false })); lbl.scale.set(.5, .125, 1); lbl.position.y = .19; btn.add(lbl);
+const uiButtons = [];
+function makeButton(text, color, r, px, py, w = .4) {
+  const g = new THREE.Group(); g.position.set(px, py, 0);
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: .6 })));
+  const c = Object.assign(document.createElement('canvas'), { width: 256, height: 64 }), cx = c.getContext('2d'), tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false })); sp.scale.set(w, w / 4, 1); sp.position.y = r + w / 5; g.add(sp);
+  g.userData = { r, label: '', setLabel(t) { this.label = t; cx.clearRect(0, 0, 256, 64); cx.fillStyle = '#fff'; cx.font = 'bold 40px system-ui'; cx.textAlign = 'center';
+    cx.shadowColor = '#000'; cx.shadowBlur = 6; cx.fillText(t, 128, 46); tex.needsUpdate = true; } };
+  g.userData.setLabel(text); ui.add(g); uiButtons.push(g); return g;
+}
+const btn = makeButton('START', 0x39ff88, .09, 0, -.3, .5);
+const exitB = makeButton('EXIT', 0xff4444, .05, -.55, .3, .3), musicB = makeButton('MUSIC ON', 0x4aa3ff, .05, .55, .3, .4);
+btn.userData.press = () => { audio(); startGame(); };
+exitB.userData.press = () => doExit();
+musicB.userData.press = () => toggleMusic();
+function pressUI(b) { const t = clock.elapsedTime; if (t - (b.userData.last ?? -9) < .6 || (b === btn && t < btnReadyAt)) return false; b.userData.last = t; b.userData.press(); return true; }
+let uiInit = false, uiAng = 0;
+function updateUI(dt) {                                  // panel hovers ~1.5 m ahead of your gaze, lazily following your head turn
+  camera.getWorldPosition(V1); camera.getWorldDirection(V2);
+  if (V2.x * V2.x + V2.z * V2.z > .04) { const a = Math.atan2(V2.x, V2.z); let d = a - uiAng; d = Math.atan2(Math.sin(d), Math.cos(d));
+    uiAng = uiInit ? uiAng + d * (1 - Math.exp(-4 * dt)) : a; uiInit = true; }
+  ui.position.set(V1.x + Math.sin(uiAng) * 1.5, V1.y - .2, V1.z + Math.cos(uiAng) * 1.5); ui.rotation.y = uiAng + Math.PI;
+}
 const beam = new THREE.Mesh(new THREE.CylinderGeometry(.3, .9, 1, 24, 1, true),
   new THREE.MeshBasicMaterial({ color: 0x66ff99, transparent: true, opacity: .35, side: THREE.DoubleSide, depthWrite: false, blending: THREE.NormalBlending }));
-beam.visible = false; scene.add(beam);
+beam.visible = false; world.add(beam);
 
 /* ───────────── Game state ───────────── */
 const PARK = new THREE.Vector3(3, 3.2, -6);
@@ -475,12 +499,14 @@ const HOVER = new THREE.Vector3(CFG.charminarPos.x, CFG.charminarHeight + CFG.uf
 let state = 'menu', tState = 0, smashed = 0, spawnT = 0, playT = 0, endReady = false, btnReadyAt = 0;
 const alive = () => bubbles.length;
 function setState(s) { state = s; tState = 0; hudKey = ''; }
-function startGame() {
-  for (const b of [...bubbles]) { b.parent.remove(b); } bubbles.length = 0;
+function resetScene() {
+  for (const b of [...bubbles]) b.parent.remove(b); bubbles.length = 0; grab = null;
   cm.position.copy(CFG.charminarPos); cm.rotation.set(0, 0, 0); cm.visible = true;
   ufo.visible = true; ufo.position.copy(PARK); beam.visible = false;
-  smashed = 0; playT = 0; endReady = false; setState('arriving');
+  smashed = 0; playT = 0; endReady = false;
 }
+function startGame() { resetScene(); setState('arriving'); }
+function toMenu() { resetScene(); setState('menu'); }
 function endGame(s) {
   setState(s); endReady = false;
   if (s === 'lost') { for (const b of bubbles) if (b.userData.state === 'fly') { b.userData.state = 'stuck'; cm.attach(b); } jingle([400, 300, 200, 120], 'sawtooth', .3); }
@@ -490,7 +516,7 @@ function endGame(s) {
 function update(dt, time) {
   tState += dt; collectPokers(); vrUpdate(dt);
   if (ufoBody) ufoBody.rotation.y += dt * (state === 'won' ? 10 : 1.2);
-  ufoLight.intensity = ufo.visible && state !== 'menu' ? 1.6 : 0; ufoLight.position.copy(ufo.position).y -= .3;
+  ufoLight.intensity = ufo.visible && state !== 'menu' ? 160 : 0; ufoLight.position.copy(ufo.position).y -= .3;
 
   switch (state) {
     case 'menu': ufo.position.copy(PARK).y += Math.sin(time) * .15; break;
@@ -503,7 +529,7 @@ function update(dt, time) {
       if ((spawnT -= dt) <= 0) { spawnBubble(); spawnT = Math.max(.3, 1.25 - smashed * .011 - playT * .003) * (.8 + Math.random() * .4); }
       const wp = new THREE.Vector3();
       for (const b of [...bubbles]) {
-        b.getWorldPosition(wp); const rr = R * b.scale.x;
+        b.getWorldPosition(wp); const rr = R * CFG.worldScale * b.scale.x;
         for (let i = 0; i < nPok; i++) { const k = pokers[i];
           if (wp.distanceToSquared(k.p) < (rr + k.r) ** 2) { pop(b); buzz(k.src); break; } }
       }
@@ -534,13 +560,14 @@ function update(dt, time) {
   }
   for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.life -= dt; p.v.y -= 2 * dt;
     p.m.position.addScaledVector(p.v, dt); p.m.scale.setScalar(Math.max(p.life / .5, .01));
-    if (p.life <= 0) { scene.remove(p.m); parts.splice(i, 1); } }
+    if (p.life <= 0) { world.remove(p.m); parts.splice(i, 1); } }
 
   const show = state === 'menu' || ((state === 'won' || state === 'lost') && endReady);
   if (show && !btn.visible) btnReadyAt = time + .8;
-  btn.visible = show; if (show) setLabel(state === 'menu' ? 'START' : 'PLAY AGAIN');
-  if (show && time > btnReadyAt) { const bp = btn.getWorldPosition(new THREE.Vector3());
-    for (let i = 0; i < nPok; i++) if (bp.distanceTo(pokers[i].p) < .1 + pokers[i].r) { audio(); buzz(pokers[i].src); startGame(); break; } }
+  btn.visible = show; const lab = state === 'menu' ? 'START' : 'PLAY AGAIN'; if (show && btn.userData.label !== lab) btn.userData.setLabel(lab);
+  updateUI(dt);
+  for (const b of uiButtons) { if (!b.visible) continue; const bp = b.getWorldPosition(V2);
+    for (let i = 0; i < nPok; i++) if (bp.distanceTo(pokers[i].p) < b.userData.r + pokers[i].r) { if (pressUI(b)) buzz(pokers[i].src); break; } }
   drawHUD();
 }
 
@@ -548,7 +575,8 @@ function update(dt, time) {
 renderer.domElement.addEventListener('click', e => {
   if (renderer.xr.isPresenting || dragMoved) return;
   ray.setFromCamera(new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
-  if (btn.visible && ray.intersectObject(btn, true).length) { startGame(); return; }
+  const bh = ray.intersectObjects(uiButtons.filter(b => b.visible), true)[0];
+  if (bh) { let o = bh.object; while (o && !o.userData.press) o = o.parent; if (o && pressUI(o)) return; }
   const hit = ray.intersectObjects(bubbles.map(b => b.children[0]))[0];
   if (hit && state === 'playing') pop(hit.object.parent);
 });
@@ -592,7 +620,7 @@ const orbitUI = document.getElementById('orbitUI');
 let orbitA = 0, orbitV = 0, dragMoved = false, lastX = null, downX = 0;
 for (const [id, dir] of [['orbL', -1], ['orbR', 1]]) {
   const b = document.getElementById(id);
-  b.addEventListener('pointerdown', e => { e.preventDefault(); orbitV = dir * .9; });
+  b.addEventListener('pointerdown', e => { e.preventDefault(); orbitV = dir * .6; });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => { orbitV = 0; });
 }
 renderer.domElement.style.touchAction = 'none';
@@ -603,18 +631,69 @@ renderer.domElement.addEventListener('pointermove', e => {          // swipe sid
   orbitA -= (e.clientX - lastX) * .008; lastX = e.clientX; });
 addEventListener('pointerup', () => { lastX = null; });
 
+/* ───────────── Exit button + quiet background music ───────────── */
+function stopGyro() {
+  if (!gyroOn) return; gyroOn = false; orbitV = 0; removeEventListener('deviceorientation', onOrient, true);
+  orbit.enabled = true; orbitUI.style.display = 'none'; camera.position.set(0, 1.7, 0); orbit.update(); motionBtn.textContent = '📱 Enable motion sensor';
+}
+function exitGame() { stopGyro(); toMenu(); renderer.xr.getSession()?.end(); }      // back to menu + leave VR
+let exitArmed = 0;
+function doExit() {                                                                  // 3D EXIT button: press twice to confirm
+  const t = clock.elapsedTime;
+  if (t < exitArmed) { exitArmed = 0; exitB.userData.setLabel('EXIT'); exitGame(); return; }
+  exitArmed = t + 3; exitB.userData.setLabel('SURE?'); setTimeout(() => { if (clock.elapsedTime >= exitArmed) exitB.userData.setLabel('EXIT'); }, 3100);
+}
+document.getElementById('exitBtn').addEventListener('click', exitGame);
+document.getElementById('musicBtn').addEventListener('click', () => toggleMusic());
+
+let musicOn = true, mGain = null, bassF, arpF, mTimer = null, mNext = 0, mStep = 0, noiseBuf = null;
+const BPM = 124, SIX = 60 / BPM / 4, MUSIC_VOL = .06;                                // MUSIC_VOL = overall loudness (very low)
+const ROOTS = [55, 43.65, 65.41, 49], ARP = [0, 1, 2, 3, 2, 1, 3, 2, 0, 1, 2, 3, 2, 1, 3, 2];
+const CHORDS = [[220, 261.63, 329.63, 440], [174.61, 220, 261.63, 349.23], [261.63, 329.63, 392, 523.25], [196, 246.94, 293.66, 392]];   // Am F C G
+function startMusic() {
+  if (!actx || mTimer) return;
+  mGain = actx.createGain(); mGain.gain.value = musicOn ? MUSIC_VOL : 0; mGain.connect(actx.destination);
+  bassF = actx.createBiquadFilter(); bassF.type = 'lowpass'; bassF.frequency.value = 420; bassF.connect(mGain);
+  arpF = actx.createBiquadFilter(); arpF.type = 'lowpass'; arpF.frequency.value = 3000; arpF.connect(mGain);
+  noiseBuf = actx.createBuffer(1, actx.sampleRate / 2 | 0, actx.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  mNext = actx.currentTime + .15; mTimer = setInterval(() => { while (mNext < actx.currentTime + .4) { musicStep(mStep++, mNext); mNext += SIX; } }, 100);
+}
+function tone(type, f, t, dur, vol, dest) {
+  const o = actx.createOscillator(), g = actx.createGain(); o.type = type; o.frequency.value = f;
+  g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(vol, t + .01); g.gain.exponentialRampToValueAtTime(.0005, t + dur);
+  o.connect(g).connect(dest); o.start(t); o.stop(t + dur + .02);
+}
+function drum(t, kind) {
+  if (kind === 'kick') { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(42, t + .13);
+    g.gain.setValueAtTime(.9, t); g.gain.exponentialRampToValueAtTime(.001, t + .2); o.connect(g).connect(mGain); o.start(t); o.stop(t + .22); return; }
+  const hat = kind === 'hat', s = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain(), dur = hat ? .04 : .12;
+  s.buffer = noiseBuf; f.type = hat ? 'highpass' : 'bandpass'; f.frequency.value = hat ? 7000 : 1800;
+  g.gain.setValueAtTime(hat ? .12 : .3, t); g.gain.exponentialRampToValueAtTime(.001, t + dur); s.connect(f).connect(g).connect(mGain); s.start(t, Math.random() * .3); s.stop(t + dur + .01);
+}
+function musicStep(n, t) {
+  const s = n % 16, bar = (n >> 4) % 4, ch = CHORDS[bar];
+  if (s % 4 === 0) drum(t, 'kick'); if (s === 4 || s === 12) drum(t, 'snare'); if (s % 2) drum(t, 'hat');
+  if (s % 2 === 0) tone('sawtooth', ROOTS[bar] * (s % 8 === 6 ? 2 : 1), t, SIX * 1.7, .5, bassF);
+  tone('square', ch[ARP[s]] * 2, t, SIX * .9, .09, arpF);
+  if (s === 0) tone('triangle', ch[0], t, SIX * 15, .18, mGain);
+}
+function toggleMusic() {
+  musicOn = !musicOn; audio(); if (mGain) mGain.gain.value = musicOn ? MUSIC_VOL : 0;
+  musicB.userData.setLabel(musicOn ? 'MUSIC ON' : 'MUSIC OFF'); document.getElementById('musicBtn').textContent = musicOn ? '🔊 Music' : '🔇 Music';
+}
+
 /* ───────────── Init ───────────── */
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05); if (ready) update(dt, clock.elapsedTime); if (gyroOn && !renderer.xr.isPresenting) {
-      orbitA += orbitV * dt; const c = CFG.charminarPos;
-      camera.position.set(c.x + Math.sin(orbitA) * 1.9, 1.6, c.z + Math.cos(orbitA) * 1.9);   // circle Charminar
+      orbitA += orbitV * dt; const c = world.position, D = CFG.playerDistance;
+      camera.position.set(c.x + Math.sin(orbitA) * D, 1.6, c.z + Math.cos(orbitA) * D);   // circle Charminar
       camera.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), orbitA).multiply(gyroQ); } renderer.render(scene, camera); });
 (async () => {
   const [a, b] = await Promise.all([loadModel(CFG.charminarFile), loadModel(CFG.ufoFile)]);
   const c = a || fallbackCharminar(); rot(c, CFG.charminarRot); cmModel = fit(c, CFG.charminarHeight, false); cm.add(cmModel);
   // Fast ray-casting: build a BVH per mesh (a raw ray test on a big FBX freezes the page)
-  cmModel.updateMatrixWorld(true);
-  const bb = new THREE.Box3().setFromObject(cmModel), bs = bb.getSize(new THREE.Vector3()); cmW = bs.x; rayTarget = cmModel;
+  scene.updateMatrixWorld(true); cmModel.updateMatrixWorld(true);
+  const bb = new THREE.Box3().setFromObject(cmModel), bs = bb.getSize(new THREE.Vector3()); cmW = bs.x / CFG.worldScale; rayTarget = cmModel;
   let tris = 0;
   try {
     const B = await import('three-mesh-bvh');

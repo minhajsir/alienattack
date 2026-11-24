@@ -1,42 +1,43 @@
 # Save Charminar – VR Bubble Smash (WebXR)
 
-A UFO hovers over Charminar and fires bubble aliens onto it. Smash **70** with your hands to win.
+A giant UFO hovers over Charminar and fires bubble aliens onto it. Smash **70** to win.
 If **100** are alive on the monument, the UFO abducts Charminar.
+
+You are tiny: Charminar, the UFO and the aliens are **10× bigger than you**, and you stand about 32 m away.
 
 ## Folder layout
 ```
 index.html
 models/
-  charminar.fbx   <- your model
-  ufo.fbx         <- your model
+  charminar.glb | charminar.gltf | charminar.fbx   <- your model (tried in this order)
+  ufo.glb       | ufo.gltf       | ufo.fbx         <- your model
 ```
-If the FBX files are missing, simple placeholder models are used so you can still test.
+Missing models are replaced by simple placeholders, and any load error is printed in a red box at the bottom of the page.
 
-## Put it on GitHub Pages
-1. Create a repo and upload everything (keep the `models` folder).
-2. Settings → Pages → Deploy from branch → `main` / root.
-3. Open `https://<your-user>.github.io/<repo>/` in the **Meta Quest Browser**.
-4. Tap **ENTER VR**. Poke the green **START** ball with your finger.
+## Host on GitHub Pages
+1. Upload everything (keep `models/`). 2. Settings → Pages → `main` / root.
+3. Open `https://<user>.github.io/<repo>/` in the Meta Quest Browser and tap **ENTER VR**.
 
-GitHub Pages is HTTPS, which WebXR requires.
+## Controls
+**Quest 3 (controllers or hand tracking)**
+- **Right hand = shotgun.** Trigger (or pinch) fires 12 pellets with a short pump delay. A red laser shows your aim.
+- **Left hand = spin Charminar.** Hold grip (or pinch) and sweep your hand sideways, like turning a turntable. The thumbstick also spins it.
+- The floating panel (score, START, EXIT, MUSIC) hovers in front of where you look and follows your head turn. Shoot or poke a button to use it.
+- **EXIT** (press twice to confirm) returns to the menu and leaves VR.
 
-## Quest 3 tips
-- Enable hand tracking: Settings → Movement tracking → Hand tracking. Controllers also work (orange orbs pop bubbles).
-- Keep each FBX under ~25 MB so it loads quickly (embed or place textures properly).
+**Phone:** tap *Enable motion sensor*, look around with the gyro, use ◀ ▶ (or swipe) to walk around Charminar, tap aliens. **✕ Exit** is at the top right.
+**Desktop:** drag to orbit, click aliens and buttons.
 
-## Tweaking (top of `index.html`, `CFG`)
-- `charminarRot` / `ufoRot`: fix models that load lying down or facing the wrong way, e.g. `[-90,0,0]` or `[0,180,0]`.
-- `charminarHeight`: size in metres (default 1.6 so it is within arm's reach).
-- `charminarPos`: distance in front of you.
-- `winAt`, `loseAt`, `bubbleR`: game balance. Spawn rate is in `update()` under `case 'playing'`.
-- Very heavy (high-poly) Charminar meshes may slow bubble placement – decimate the model if so.
+## Music
+A quiet procedural background track starts after your first tap/click (browsers require this). Toggle with the MUSIC button.
+Loudness: `MUSIC_VOL` in `index.html` (default 0.06).
 
-## Desktop testing
-Open the page in a normal browser: drag to orbit, click START, click bubbles.
-Serve locally with `python3 -m http.server` (FBX can't load from `file://`).
+## Tweaking (`CFG` at the top of `index.html`)
+- `worldScale` (10): how many times bigger the world is than the player.
+- `playerDistance` (32): metres from Charminar.
+- `charminarRot` / `ufoRot`: fix models that load lying down or facing the wrong way.
+- `gunHand`: `'right'` or `'left'`.
+- `winAt`, `loseAt`, `bubbleR`: balance.
 
-## VR controls (Quest 3)
-- **Right hand = shotgun.** Trigger (controllers) or pinch (hand tracking) fires 9 pellets with a short pump delay. A red laser shows your aim. You can also shoot the START / PLAY AGAIN ball.
-- **Left hand = spin Charminar.** Hold the grip button (or pinch with a tracked hand) and swing your hand around the model like a turntable. The left thumbstick also spins it.
-- Touching bubbles with a hand still pops them.
-- Left-handed? Set `gunHand: 'left'` in `CFG`.
+## Performance tips for Quest
+Keep Charminar under ~100k triangles, textures ≤ 2048 px, ideally a single `.glb` under ~15 MB.
