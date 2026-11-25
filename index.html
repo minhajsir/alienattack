@@ -6,16 +6,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   html,body{margin:0;height:100%;background:#8ccbff;overflow:hidden;font-family:system-ui,sans-serif;color:#fff}
-  #info{position:fixed;top:12px;left:0;right:0;text-align:center;pointer-events:none;text-shadow:0 0 8px #000}
-  #info h1{margin:0;font-size:22px}
-  #info p{margin:4px 0;font-size:14px;opacity:.85}
-  #motionBtn{position:fixed;left:12px;bottom:14px;display:none;padding:12px 16px;font-size:15px;border:0;border-radius:24px;background:#1e88e5;color:#fff;box-shadow:0 2px 10px #0006}
-  #orbitUI{position:fixed;right:12px;bottom:14px;display:none;gap:10px;align-items:center;color:#fff;font-size:13px;text-shadow:0 0 6px #000}
+  #motionBtn{position:fixed;left:12px;bottom:14px;z-index:30;display:none;padding:12px 16px;font-size:15px;border:0;border-radius:24px;background:#1e88e5;color:#fff;box-shadow:0 2px 10px #0006}
+  #orbitUI{position:fixed;right:12px;bottom:14px;z-index:30;display:none;gap:10px;align-items:center;color:#fff;font-size:13px;text-shadow:0 0 6px #000}
   #orbitUI button{width:60px;height:60px;border:0;border-radius:50%;font-size:26px;background:#1e88e5;color:#fff;box-shadow:0 2px 10px #0006;touch-action:none;user-select:none}
-  .tb{position:fixed;right:12px;padding:8px 14px;border:0;border-radius:20px;background:#0008;color:#fff;font-size:14px}
-  #exitBtn{top:12px;background:#d32f2f}
-  #musicBtn{top:56px}
-  #status{position:fixed;bottom:64px;left:0;right:0;text-align:center;font-size:13px;opacity:.7;pointer-events:none}
+  #bar{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;display:flex;gap:8px;align-items:center;white-space:nowrap;padding:6px 10px;border-radius:22px;background:#0a1030cc;color:#fff;font-size:13px;z-index:25;max-width:96vw}
+  #bar button{padding:6px 11px;border:0;border-radius:16px;font-size:13px;background:#1e88e5;color:#fff}
+  #bar button:disabled{opacity:.5}
+  #playBtn{background:#2e9e5b!important}
+  #exitBtn{background:#d32f2f!important}
+  #title{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(3,6,20,.6);z-index:20}
+  #title .card{max-width:520px;margin:16px;padding:22px 24px;border-radius:18px;background:#0e1640ee;border:1px solid #5ff6;text-align:center;box-shadow:0 8px 40px #000a}
+  #title h1{margin:0 0 10px;font-size:28px}
+  #title p{margin:6px 0;font-size:15px;line-height:1.4;opacity:.92}
+  #title .hint{font-size:13px;opacity:.75}
+  #titleStart{margin-top:14px;padding:14px 40px;font-size:20px;border:0;border-radius:30px;background:#39ff88;color:#052;font-weight:700}
+  #titleStart:disabled{opacity:.5}
+  #status{position:fixed;top:6px;left:8px;right:8px;text-align:left;font-size:11px;opacity:.55;pointer-events:none;z-index:5}
 </style>
 <script type="importmap">
 {"imports":{
@@ -26,13 +32,15 @@
 </script>
 </head>
 <body>
-<div id="info">
+<div id="title"><div class="card">
   <h1>🛸 Save Charminar!</h1>
-  <p>Aliens are sticking to Charminar. Smash <b>70</b> bubbles with your hands before <b>100</b> are on it.</p>
-  <p>Quest 3: press <b>ENTER VR</b> Right hand = shotgun (trigger or pinch to fire). Left hand = hold grip or pinch and swing sideways (or use the thumbstick) to spin Charminar. Phone: tap <b>Enable motion sensor</b>, look around and tap bubbles. Desktop: click bubbles.</p>
-</div>
+  <p>Aliens are sticking to Charminar! Smash <b>70</b> of them before <b>100</b> cover it – or the UFO takes Charminar away.</p>
+  <p class="hint">🥽 Quest 3: tap <b>ENTER VR</b>. Right hand = shotgun (trigger / pinch). Left hand = grab &amp; sweep sideways to spin Charminar.<br>
+  📱 Phone: tap <b>Enable motion sensor</b>, look around, ◀ ▶ to walk, tap aliens.<br>🖥️ Desktop: drag to look around, click aliens.</p>
+  <button id="titleStart" disabled>Loading…</button>
+</div></div>
 <div id="status">Loading models…</div>
-<button class="tb" id="exitBtn">✕ Exit</button><button class="tb" id="musicBtn">🔊 Music</button>
+<div id="bar"><span id="barTxt"></span><button id="playBtn" disabled>START</button><button id="musicBtn">🔊</button><button id="exitBtn">✕ Exit</button></div>
 <div id="orbitUI"><button id="orbL">◀</button><span>walk<br>around</span><button id="orbR">▶</button></div>
 <button id="motionBtn">📱 Enable motion sensor</button>
 
@@ -55,9 +63,9 @@ const CFG = {
   charminarHeight: 1.6,         // metres in VR (kept small so you can reach it)
   charminarPos: new THREE.Vector3(0, 0, 0),   // centre of the scaled world
   worldScale: 10,               // Charminar / UFO / aliens are 10x bigger than the player
-  playerDistance: 32,           // metres the player stands from Charminar
+  playerDistance: 15,           // metres the player stands from Charminar (10–15 works well)
   ufoWidth: 1.3,
-  ufoHover: 0.9,                // gap above Charminar's top
+  ufoHover: 0.7,                // gap above Charminar's top
   bubbleR: 0.065,
   winAt: 70,
   loseAt: 100,
@@ -77,8 +85,8 @@ document.body.appendChild(VRButton.createButton(renderer, {
 }));
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xbfe6ff);
-scene.fog = new THREE.Fog(0xcfeaff, 120, 800);
+scene.background = new THREE.Color(0x050816);
+scene.fog = new THREE.Fog(0x0a0f2e, 150, 900);
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 2500);
 camera.position.set(0, 1.7, 0);
 const orbit = new OrbitControls(camera, renderer.domElement);
@@ -87,29 +95,40 @@ orbit.update();
 // Everything in the game (Charminar, UFO, aliens, scenery, sky) lives in `world`, scaled up so the player (you) is ~10x smaller.
 const world = new THREE.Group(); world.scale.setScalar(CFG.worldScale); world.position.set(0, 0, -CFG.playerDistance); scene.add(world);
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x88aa66, 1.5));
-const sun = new THREE.DirectionalLight(0xfff2d0, 2.4); sun.position.set(30, 45, -20); scene.add(sun);
+scene.add(new THREE.HemisphereLight(0x8fa4ff, 0x1a1f3a, 1.0));
+const sun = new THREE.DirectionalLight(0xb8c8ff, 1.4); sun.position.set(30, 45, -20); scene.add(sun);
 const ufoLight = new THREE.PointLight(0x66ff99, 0, 50); world.add(ufoLight);
+for (const sx of [-1, 1]) { const fl = new THREE.PointLight(0xffd9a0, 220, 90, 2); fl.position.set(sx * 1.4, .5, 2.2); world.add(fl); }   // floodlights on Charminar
 
 // Ground: grass + stone plaza around Charminar
 const ground = new THREE.Mesh(new THREE.CircleGeometry(90, 64).rotateX(-Math.PI / 2),
-  new THREE.MeshStandardMaterial({ color: 0x5aa84a, roughness: 1 }));
+  new THREE.MeshStandardMaterial({ color: 0x1b3524, roughness: 1 }));
 world.add(ground);
 const plaza = new THREE.Mesh(new THREE.CircleGeometry(2.4, 48).rotateX(-Math.PI / 2),
-  new THREE.MeshStandardMaterial({ color: 0xd9c9a3, roughness: .9 }));
+  new THREE.MeshStandardMaterial({ color: 0x6b6048, roughness: .9 }));
 plaza.position.set(CFG.charminarPos.x, 0.004, CFG.charminarPos.z); world.add(plaza);
 
 // Sky dome (gradient), sun and clouds
 const sky = new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
-  uniforms: { top: { value: new THREE.Color(0x2b7fe0) }, hor: { value: new THREE.Color(0xcfeaff) } },
+  uniforms: { top: { value: new THREE.Color(0x01020c) }, hor: { value: new THREE.Color(0x14214a) } },
   vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
   fragmentShader: 'uniform vec3 top; uniform vec3 hor; varying vec3 vP; void main(){ float h = max(normalize(vP).y,0.); gl_FragColor = vec4(mix(hor, top, pow(h,.55)),1.); }'
 }));
-world.add(sky);
-const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(4, 24, 16), new THREE.MeshBasicMaterial({ color: 0xfff3b0, fog: false }));
-sunDisc.position.set(30, 45, -20).setLength(85); world.add(sunDisc);
-{ const cm_ = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .92, fog: false });
+world.add(sky); sky.renderOrder = -2;
+const stars = new THREE.Group(); scene.add(stars);                 // night sky: two layers of stars
+for (const [n, size] of [[900, 2], [140, 4]]) {
+  const p = [];
+  for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, b = Math.asin(Math.random() * 1.04 - .04), r = 950;
+    p.push(Math.cos(a) * Math.cos(b) * r, Math.sin(b) * r, Math.sin(a) * Math.cos(b) * r); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+  const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size, sizeAttenuation: false, fog: false, depthWrite: false }));
+  pts.renderOrder = -1; stars.add(pts);
+}
+const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(4, 24, 16), new THREE.MeshBasicMaterial({ color: 0xf6f1d8, fog: false }));
+sunDisc.position.set(30, 45, -20).setLength(85); world.add(sunDisc);   // the moon
+{ const halo = new THREE.Mesh(new THREE.SphereGeometry(7, 24, 16), new THREE.MeshBasicMaterial({ color: 0x9fb4ff, transparent: true, opacity: .12, fog: false, depthWrite: false })); halo.position.copy(sunDisc.position); world.add(halo); }
+{ const cm_ = new THREE.MeshBasicMaterial({ color: 0x2a335c, transparent: true, opacity: .55, fog: false });
   for (let i = 0; i < 10; i++) {
     const c = new THREE.Group(), a = Math.random() * 6.283, d = 35 + Math.random() * 35;
     for (let j = 0; j < 5; j++) { const p = new THREE.Mesh(new THREE.SphereGeometry(2 + Math.random() * 2.5, 12, 8), cm_);
@@ -123,7 +142,7 @@ sunDisc.position.set(30, 45, -20).setLength(85); world.add(sunDisc);
     t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
   const C = CFG.charminarPos, taken = [];
   const free = (x, z, r) => Math.hypot(x, z - CFG.playerDistance / CFG.worldScale) > 1.6 + r && taken.every(t => Math.hypot(t.x - x, t.z - z) > t.r + r);
-  const road = new THREE.Mesh(new THREE.RingGeometry(2.4, 3.3, 64).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x555a62, roughness: 1 }));
+  const road = new THREE.Mesh(new THREE.RingGeometry(2.4, 3.3, 64).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x2b2e35, roughness: 1 }));
   road.position.set(C.x, .003, C.z); world.add(road);
 
   const inst = (geo, mat, n) => { const m = new THREE.InstancedMesh(geo, mat, n); world.add(m); return m; };
@@ -137,9 +156,9 @@ sunDisc.position.set(30, 45, -20).setLength(85); world.add(sunDisc);
     if (!free(x, z, rad)) continue;
     taken.push({ x, z, r: rad }); B.push({ x, z, w, d, h, ang: Math.atan2(C.x - x, C.z - z) });
   }
-  const box = new THREE.BoxGeometry(1, 1, 1), pal = [0xf2d7b6, 0xe8b9a0, 0xf4e3c1, 0xd9c4a5, 0xc9d8e4, 0xf0c8c8, 0xe6d3f0, 0xfbeab8];
+  const box = new THREE.BoxGeometry(1, 1, 1), pal = [0x8a7a68, 0x7a5f55, 0x8d8470, 0x6f6a5c, 0x5f6f80, 0x85605f, 0x6c5f80, 0x8a7d55];
   const bodies = inst(box, new THREE.MeshStandardMaterial({ roughness: .9 }), B.length);
-  const roofs = inst(box, new THREE.MeshStandardMaterial({ color: 0x8a7d6e, roughness: 1 }), B.length);
+  const roofs = inst(box, new THREE.MeshStandardMaterial({ color: 0x453d34, roughness: 1 }), B.length);
   const wins = [], domes = [];
   B.forEach((b, i) => {
     Q.setFromAxisAngle(UP, b.ang);
@@ -153,10 +172,11 @@ sunDisc.position.set(30, 45, -20).setLength(85); world.add(sunDisc);
     if (rnd() < .35) domes.push({ x: b.x, y: b.h + .04, z: b.z, r: Math.min(b.w, b.d) * .32 });
   });
   bodies.instanceColor.needsUpdate = true;
-  const winM = inst(new THREE.PlaneGeometry(.09, .13), new THREE.MeshStandardMaterial({ color: 0x35556f, roughness: .4, metalness: .2 }), wins.length);
-  wins.forEach((w, i) => winM.setMatrixAt(i, M.compose(w.p, w.q, S.set(1, 1, 1))));
+  const winM = inst(new THREE.PlaneGeometry(.09, .13), new THREE.MeshBasicMaterial({ color: 0xffffff }), wins.length);
+  wins.forEach((w, i) => { winM.setMatrixAt(i, M.compose(w.p, w.q, S.set(1, 1, 1))); winM.setColorAt(i, COL.setHex(rnd() < .7 ? 0xffd27a : 0x2a3550)); });   // lit windows
+  if (wins.length) winM.instanceColor.needsUpdate = true;
   const domeM = inst(new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ roughness: .5 }), domes.length);
-  domes.forEach((d, i) => { domeM.setMatrixAt(i, M.compose(P.set(d.x, d.y, d.z), Q.identity(), S.set(d.r, d.r * .9, d.r))); domeM.setColorAt(i, COL.setHex(i % 2 ? 0xf8f4ea : 0x2ab5a5)); });
+  domes.forEach((d, i) => { domeM.setMatrixAt(i, M.compose(P.set(d.x, d.y, d.z), Q.identity(), S.set(d.r, d.r * .9, d.r))); domeM.setColorAt(i, COL.setHex(i % 2 ? 0xcfcabb : 0x1d7f76)); });
   if (domes.length) domeM.instanceColor.needsUpdate = true;
 
   // trees (0.35–0.7 m)
@@ -165,9 +185,9 @@ sunDisc.position.set(30, 45, -20).setLength(85); world.add(sunDisc);
     const a = rnd() * 6.283, r = 3.3 + rnd() * 8.5, x = C.x + Math.cos(a) * r, z = C.z + Math.sin(a) * r, h = .35 + rnd() * .35;
     if (!free(x, z, .2)) continue; taken.push({ x, z, r: .2 }); T.push({ x, z, h });
   }
-  const trunks = inst(new THREE.CylinderGeometry(.025, .035, 1, 6), new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 1 }), T.length);
+  const trunks = inst(new THREE.CylinderGeometry(.025, .035, 1, 6), new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 1 }), T.length);
   const leaves = inst(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ roughness: .9, flatShading: true }), T.length);
-  const greens = [0x3f9b3a, 0x2f8a45, 0x57b14a, 0x4aa05a];
+  const greens = [0x1d5a2a, 0x174a2e, 0x2a6830, 0x205a3a];
   T.forEach((t, i) => { const sr = t.h * .32;
     trunks.setMatrixAt(i, M.compose(P.set(t.x, t.h * .225, t.z), Q.identity(), S.set(1, t.h * .45, 1)));
     leaves.setMatrixAt(i, M.compose(P.set(t.x, t.h * .45 + sr * .7, t.z), Q.identity(), S.set(sr, sr * 1.1, sr)));
@@ -406,7 +426,7 @@ function shoot(c) {
   gun.userData.kick = 1; gun.userData.flashT = .06; sfxShot(); c.userData.src?.gamepad?.hapticActuators?.[0]?.pulse?.(1, 90);
 
   const aim = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
-  for (const b of uiButtons) { if (!b.visible) continue;                    // shoot START / EXIT / MUSIC
+  for (const b of uiButtons) { if (!shown(b)) continue;                    // shoot START / EXIT / MUSIC
     const bp = b.getWorldPosition(V2).sub(origin), t = bp.dot(aim);
     if (t > 0 && bp.lengthSq() - t * t < (b.userData.r + .08) ** 2 && pressUI(b)) return; }
   if (state !== 'playing') return;
@@ -448,46 +468,63 @@ function vrUpdate(dt) {
 }
 
 /* ───────────── HUD + start button ───────────── */
-const hudC = Object.assign(document.createElement('canvas'), { width: 512, height: 288 }), hx = hudC.getContext('2d');
+const shown = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
+const hudC = Object.assign(document.createElement('canvas'), { width: 1024, height: 128 }), hx = hudC.getContext('2d');
 const hudTex = new THREE.CanvasTexture(hudC); hudTex.colorSpace = THREE.SRGBColorSpace;
-const hud = new THREE.Mesh(new THREE.PlaneGeometry(.8, .45), new THREE.MeshBasicMaterial({ map: hudTex, toneMapped: false }));
-const ui = new THREE.Group(); scene.add(ui); hud.position.set(0, .22, 0); ui.add(hud);   // UI follows where you look
-const MSG = { menu: 'Shoot or poke START', arriving: '🛸 UFO INCOMING!', playing: 'SMASH THE ALIENS!', won: 'CHARMINAR SAVED!', lost: 'GAME OVER – ABDUCTED!' };
+const ui = new THREE.Group(); scene.add(ui); ui.visible = false;       // VR score panel: ONE line, lower part of your view
+const hud = new THREE.Mesh(new THREE.PlaneGeometry(.72, .09), new THREE.MeshBasicMaterial({ map: hudTex, toneMapped: false, transparent: true }));
+ui.add(hud);
+const SHORT = { arriving: 'UFO INCOMING', won: 'CHARMINAR SAVED!', lost: 'ABDUCTED!' };
 let hudKey = '';
-function bar(x, y, w, h, f, col) { hx.fillStyle = '#223'; hx.fillRect(x, y, w, h); hx.fillStyle = col; hx.fillRect(x, y, w * Math.min(f, 1), h); }
 function drawHUD() {
-  const key = `${smashed}|${alive()}|${state}`; if (key === hudKey) return; hudKey = key;
-  hx.fillStyle = 'rgba(8,14,40,.85)'; hx.fillRect(0, 0, 512, 288);
-  hx.strokeStyle = '#5ff'; hx.lineWidth = 4; hx.strokeRect(2, 2, 508, 284);
-  hx.fillStyle = '#fff'; hx.textAlign = 'left'; hx.font = 'bold 30px system-ui';
-  hx.fillText(`SMASHED  ${smashed} / ${CFG.winAt}`, 24, 56); bar(24, 68, 464, 24, smashed / CFG.winAt, '#39ff88');
-  hx.font = 'bold 26px system-ui'; hx.fillText(`ALIENS ON CHARMINAR  ${alive()} / ${CFG.loseAt}`, 24, 140);
-  bar(24, 152, 464, 24, alive() / CFG.loseAt, '#ff4a4a');
-  hx.fillStyle = '#ffe066'; hx.font = 'bold 30px system-ui'; hx.textAlign = 'center'; hx.fillText(MSG[state] || '', 256, 245);
+  const a = alive(), key = `${smashed}|${a}|${state}`; if (key === hudKey) return; hudKey = key;
+  hx.clearRect(0, 0, 1024, 128); hx.fillStyle = 'rgba(8,14,40,.85)'; hx.beginPath(); hx.roundRect(4, 4, 1016, 120, 60); hx.fill();
+  hx.strokeStyle = '#5ff'; hx.lineWidth = 4; hx.stroke(); hx.textBaseline = 'middle';
+  const parts = [...(SHORT[state] ? [[SHORT[state], '#ffe066']] : []), [`SMASH ${smashed}/${CFG.winAt}`, '#7dffb0'], [`ALIENS ${a}/${CFG.loseAt}`, '#ff8a8a']], gap = 40;
+  let fs = 44, w, total; const meas = () => { hx.font = `bold ${fs}px system-ui`; w = parts.map(p => hx.measureText(p[0]).width); total = w.reduce((x, y) => x + y, 0) + gap * (parts.length - 1); };
+  meas(); if (total > 960) { fs = Math.floor(fs * 960 / total); meas(); }
+  let x = (1024 - total) / 2; parts.forEach((p, i) => { hx.fillStyle = p[1]; hx.fillText(p[0], x, 68); x += w[i] + gap; });
   hudTex.needsUpdate = true;
 }
 const uiButtons = [];
-function makeButton(text, color, r, px, py, w = .4) {
+function makeButton(text, color, r, px, py, w = .4, parent = ui) {
   const g = new THREE.Group(); g.position.set(px, py, 0);
   g.add(new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: .6 })));
   const c = Object.assign(document.createElement('canvas'), { width: 256, height: 64 }), cx = c.getContext('2d'), tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false })); sp.scale.set(w, w / 4, 1); sp.position.y = r + w / 5; g.add(sp);
   g.userData = { r, label: '', setLabel(t) { this.label = t; cx.clearRect(0, 0, 256, 64); cx.fillStyle = '#fff'; cx.font = 'bold 40px system-ui'; cx.textAlign = 'center';
     cx.shadowColor = '#000'; cx.shadowBlur = 6; cx.fillText(t, 128, 46); tex.needsUpdate = true; } };
-  g.userData.setLabel(text); ui.add(g); uiButtons.push(g); return g;
+  g.userData.setLabel(text); parent.add(g); uiButtons.push(g); return g;
 }
-const btn = makeButton('START', 0x39ff88, .09, 0, -.3, .5);
-const exitB = makeButton('EXIT', 0xff4444, .05, -.55, .3, .3), musicB = makeButton('MUSIC ON', 0x4aa3ff, .05, .55, .3, .4);
+// buttons sit on the score panel line
+const exitB = makeButton('EXIT', 0xff4444, .035, -.5, 0, .22), btn = makeButton('START', 0x39ff88, .035, .5, 0, .3), musicB = makeButton('MUSIC', 0x4aa3ff, .035, .68, 0, .28);
 btn.userData.press = () => { audio(); startGame(); };
 exitB.userData.press = () => doExit();
 musicB.userData.press = () => toggleMusic();
-function pressUI(b) { const t = clock.elapsedTime; if (t - (b.userData.last ?? -9) < .6 || (b === btn && t < btnReadyAt)) return false; b.userData.last = t; b.userData.press(); return true; }
-let uiInit = false, uiAng = 0;
-function updateUI(dt) {                                  // panel hovers ~1.5 m ahead of your gaze, lazily following your head turn
+// title card (VR): instructions + START, shown in the menu and hidden once the game starts
+const titleC = Object.assign(document.createElement('canvas'), { width: 1024, height: 640 }), titleTex = new THREE.CanvasTexture(titleC); titleTex.colorSpace = THREE.SRGBColorSpace;
+{ const c = titleC.getContext('2d'); c.fillStyle = 'rgba(10,16,52,.94)'; c.beginPath(); c.roundRect(6, 6, 1012, 628, 48); c.fill(); c.strokeStyle = '#5ff'; c.lineWidth = 6; c.stroke();
+  c.fillStyle = '#fff'; c.textAlign = 'center'; c.font = 'bold 72px system-ui'; c.fillText('Save Charminar!', 512, 110); c.font = '38px system-ui';
+  ['Aliens are sticking to Charminar!', 'Smash 70 of them before 100 cover it.', 'Right hand: shotgun (trigger / pinch).', 'Left hand: grab + sweep to spin Charminar.']
+    .forEach((l, i) => c.fillText(l, 512, 200 + i * 60)); titleTex.needsUpdate = true; }
+const titleCard = new THREE.Group(); scene.add(titleCard); titleCard.visible = false;
+titleCard.add(new THREE.Mesh(new THREE.PlaneGeometry(1.5, .94), new THREE.MeshBasicMaterial({ map: titleTex, toneMapped: false, transparent: true })));
+const startCard = makeButton('START', 0x39ff88, .08, 0, -.34, .5, titleCard);
+startCard.userData.press = () => { audio(); startGame(); };
+function pressUI(b) { const t = clock.elapsedTime; if (t - (b.userData.last ?? -9) < .6 || ((b === btn || b === startCard) && t < btnReadyAt)) return false; b.userData.last = t; b.userData.press(); return true; }
+let uiPlaced = false, titleShown = false; const V3 = new THREE.Vector3(), V4 = new THREE.Vector3();
+function updateUI(dt) {
+  const xr = renderer.xr.isPresenting; ui.visible = xr; titleCard.visible = xr && state === 'menu';
+  if (!xr) { uiPlaced = false; titleShown = false; return; }          // phone / desktop use the HTML bar + title card instead
   camera.getWorldPosition(V1); camera.getWorldDirection(V2);
-  if (V2.x * V2.x + V2.z * V2.z > .04) { const a = Math.atan2(V2.x, V2.z); let d = a - uiAng; d = Math.atan2(Math.sin(d), Math.cos(d));
-    uiAng = uiInit ? uiAng + d * (1 - Math.exp(-4 * dt)) : a; uiInit = true; }
-  ui.position.set(V1.x + Math.sin(uiAng) * 1.5, V1.y - .2, V1.z + Math.cos(uiAng) * 1.5); ui.rotation.y = uiAng + Math.PI;
+  if (titleCard.visible && !titleShown) {                              // title card appears in front of you, then stays put
+    V4.set(V2.x, 0, V2.z); if (V4.lengthSq() < 1e-4) V4.set(0, 0, -1); V4.normalize();
+    titleCard.position.set(V1.x + V4.x * 2.2, V1.y, V1.z + V4.z * 2.2); titleCard.lookAt(V1);
+  }
+  titleShown = titleCard.visible;
+  V3.set(0, -.5, -1.4); camera.localToWorld(V3);                       // score panel: lower part of your view, lazily follows your gaze
+  if (!uiPlaced) { ui.position.copy(V3); uiPlaced = true; } else ui.position.lerp(V3, 1 - Math.exp(-5 * dt));
+  ui.lookAt(V1);
 }
 const beam = new THREE.Mesh(new THREE.CylinderGeometry(.3, .9, 1, 24, 1, true),
   new THREE.MeshBasicMaterial({ color: 0x66ff99, transparent: true, opacity: .35, side: THREE.DoubleSide, depthWrite: false, blending: THREE.NormalBlending }));
@@ -514,9 +551,9 @@ function endGame(s) {
 }
 
 function update(dt, time) {
-  tState += dt; collectPokers(); vrUpdate(dt);
+  tState += dt; collectPokers(); vrUpdate(dt); stars.rotation.y += dt * .004;
   if (ufoBody) ufoBody.rotation.y += dt * (state === 'won' ? 10 : 1.2);
-  ufoLight.intensity = ufo.visible && state !== 'menu' ? 160 : 0; ufoLight.position.copy(ufo.position).y -= .3;
+  ufoLight.intensity = ufo.visible && state !== 'menu' ? 300 : 0; ufoLight.position.copy(ufo.position).y -= .3;
 
   switch (state) {
     case 'menu': ufo.position.copy(PARK).y += Math.sin(time) * .15; break;
@@ -565,9 +602,9 @@ function update(dt, time) {
   const show = state === 'menu' || ((state === 'won' || state === 'lost') && endReady);
   if (show && !btn.visible) btnReadyAt = time + .8;
   btn.visible = show; const lab = state === 'menu' ? 'START' : 'PLAY AGAIN'; if (show && btn.userData.label !== lab) btn.userData.setLabel(lab);
-  updateUI(dt);
-  for (const b of uiButtons) { if (!b.visible) continue; const bp = b.getWorldPosition(V2);
-    for (let i = 0; i < nPok; i++) if (bp.distanceTo(pokers[i].p) < b.userData.r + pokers[i].r) { if (pressUI(b)) buzz(pokers[i].src); break; } }
+  updateUI(dt); syncDom();
+  for (const b of uiButtons) { if (!shown(b)) continue; const bp = b.getWorldPosition(V2);
+    for (let i = 0; i < nPok; i++) if (bp.distanceTo(pokers[i].p) < b.userData.r + .03 + pokers[i].r) { if (pressUI(b)) buzz(pokers[i].src); break; } }
   drawHUD();
 }
 
@@ -575,7 +612,7 @@ function update(dt, time) {
 renderer.domElement.addEventListener('click', e => {
   if (renderer.xr.isPresenting || dragMoved) return;
   ray.setFromCamera(new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
-  const bh = ray.intersectObjects(uiButtons.filter(b => b.visible), true)[0];
+  const bh = ray.intersectObjects(uiButtons.filter(shown), true)[0];
   if (bh) { let o = bh.object; while (o && !o.userData.press) o = o.parent; if (o && pressUI(o)) return; }
   const hit = ray.intersectObjects(bubbles.map(b => b.children[0]))[0];
   if (hit && state === 'playing') pop(hit.object.parent);
@@ -643,8 +680,19 @@ function doExit() {                                                             
   if (t < exitArmed) { exitArmed = 0; exitB.userData.setLabel('EXIT'); exitGame(); return; }
   exitArmed = t + 3; exitB.userData.setLabel('SURE?'); setTimeout(() => { if (clock.elapsedTime >= exitArmed) exitB.userData.setLabel('EXIT'); }, 3100);
 }
-document.getElementById('exitBtn').addEventListener('click', exitGame);
-document.getElementById('musicBtn').addEventListener('click', () => toggleMusic());
+const $ = id => document.getElementById(id);
+$('exitBtn').addEventListener('click', exitGame);
+for (const id of ['titleStart', 'playBtn']) $(id).addEventListener('click', () => { audio(); startGame(); });
+const BAR = { arriving: '🛸 ', won: '🎉 SAVED! ', lost: '💀 ABDUCTED! ' }; let domKey = '';
+function syncDom() {                                                   // title card + one-line bar for phone / desktop
+  const xr = renderer.xr.isPresenting, end = state === 'won' || state === 'lost';
+  const key = `${xr}|${state}|${smashed}|${bubbles.length}|${endReady}`; if (key === domKey) return; domKey = key;
+  $('title').style.display = state === 'menu' && !xr ? 'flex' : 'none';
+  $('bar').style.display = xr ? 'none' : 'flex';
+  const pb = $('playBtn'); pb.style.display = state === 'menu' || (end && endReady) ? '' : 'none'; pb.textContent = state === 'menu' ? 'START' : 'PLAY AGAIN';
+  $('barTxt').textContent = `${BAR[state] || ''}🎯 ${smashed}/${CFG.winAt}  👾 ${bubbles.length}/${CFG.loseAt}`;
+}
+$('musicBtn').addEventListener('click', () => toggleMusic());
 
 let musicOn = true, mGain = null, bassF, arpF, mTimer = null, mNext = 0, mStep = 0, noiseBuf = null;
 const BPM = 124, SIX = 60 / BPM / 4, MUSIC_VOL = .06;                                // MUSIC_VOL = overall loudness (very low)
@@ -679,7 +727,7 @@ function musicStep(n, t) {
 }
 function toggleMusic() {
   musicOn = !musicOn; audio(); if (mGain) mGain.gain.value = musicOn ? MUSIC_VOL : 0;
-  musicB.userData.setLabel(musicOn ? 'MUSIC ON' : 'MUSIC OFF'); document.getElementById('musicBtn').textContent = musicOn ? '🔊 Music' : '🔇 Music';
+  musicB.userData.setLabel(musicOn ? 'MUSIC ON' : 'MUSIC OFF'); $('musicBtn').textContent = musicOn ? '🔊' : '🔇';
 }
 
 /* ───────────── Init ───────────── */
@@ -712,6 +760,7 @@ renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05); if
   if (loadErrors.length) { const st = document.getElementById('status'); st.style.whiteSpace = 'pre-line'; st.style.color = '#ffd0d0';
     st.style.background = 'rgba(120,0,0,.6)'; st.textContent += '\n' + loadErrors.join('\n'); }
   scene.updateMatrixWorld(true); ready = true; setState('menu');
+  for (const id of ['titleStart', 'playBtn']) $(id).disabled = false; $('titleStart').textContent = 'START';
 })();
 </script>
 </body>
