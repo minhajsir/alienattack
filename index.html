@@ -66,6 +66,9 @@ const CFG = {
   ufoFile: ['models/ufo.glb', 'models/ufo.gltf', 'models/ufo.fbx'],
   charminarRot: [0, 0, 0],      // degrees [x,y,z] – use e.g. [-90,0,0] if the FBX is lying down
   ufoRot: [0, 0, 0],
+  chestFile: ['models/chest.glb', 'models/chest.gltf', 'models/chest.fbx'],   // optional: your chest model (copied 4 times)
+  chestRot: [0, 0, 0],          // rotate so the chest FRONT faces +Z (e.g. [0,180,0] if it faces the wrong way)
+  chestWidth: .24,              // chest size in world units (x10 in metres)
   charminarHeight: 1.6,         // metres in VR (kept small so you can reach it)
   charminarPos: new THREE.Vector3(0, 0, 0),   // centre of the scaled world
   worldScale: 10,               // Charminar / UFO / aliens are 10x bigger than the player
@@ -211,7 +214,7 @@ const gltfLoader = new GLTFLoader()
   .setDRACOLoader(new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/'))
   .setMeshoptDecoder(MeshoptDecoder);
 const loadErrors = [];
-async function loadModel(urls) {
+async function loadModel(urls, optional = false) {
   const errs = [];
   for (const url of [].concat(urls)) {
     try {
@@ -219,7 +222,7 @@ async function loadModel(urls) {
       console.log('Loaded', url); return m;
     } catch (e) { errs.push(`${url}: ${e?.message || e}`); console.warn('Could not load', url, e); }
   }
-  loadErrors.push(...errs); return null;
+  if (!optional) loadErrors.push(...errs); return null;
 }
 const rot = (o, r) => o.rotation.set(...r.map(d => THREE.MathUtils.degToRad(d)));
 
@@ -502,7 +505,12 @@ const FACTS = [
 ];
 
 // chests lying on the ground: a lower part and a lid that opens 120°
-function makeChest(woodCol, glowCol) {
+function makeShaft(glow, top) {                              // light shaft that glows while a chest is open
+  const sh = new THREE.Mesh(new THREE.CylinderGeometry(.04, .09, .5, 16, 1, true),
+    new THREE.MeshBasicMaterial({ color: glow, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  sh.position.y = top + .26; sh.visible = false; return sh;
+}
+function makeChest(woodCol, glowCol, kind) {                 // built-in chest (used when no chest model is supplied)
   const g = new THREE.Group(), wood = new THREE.MeshStandardMaterial({ color: woodCol, roughness: .8 }),
     gold = new THREE.MeshStandardMaterial({ color: 0xd4a62a, metalness: .8, roughness: .35, emissive: 0x3a2a00 });
   const woodDS = wood.clone(), goldDS = gold.clone(); woodDS.side = goldDS.side = THREE.DoubleSide;
@@ -511,22 +519,53 @@ function makeChest(woodCol, glowCol) {
   for (const y of [.018, CH_H - .014]) add(new THREE.BoxGeometry(CH_W + .008, .016, CH_D + .008), gold, 0, y, 0);
   add(new THREE.BoxGeometry(CH_W - .02, .004, CH_D - .02), new THREE.MeshStandardMaterial({ color: 0x7a1020, roughness: 1 }), 0, CH_H + .001, 0);   // velvet lining
   const hinge = new THREE.Group(); hinge.position.set(0, CH_H, -CH_D / 2); g.add(hinge);                  // lid turns around the back edge
-  const arch = r => new THREE.CylinderGeometry(r, r, 1, 20, 1, true, 0, Math.PI).rotateZ(Math.PI / 2);
   add(new THREE.CylinderGeometry(CH_D / 2, CH_D / 2, CH_W, 20, 1, true, 0, Math.PI).rotateZ(Math.PI / 2), woodDS, 0, 0, CH_D / 2, hinge);
   for (const sx of [-1, 1]) {
     add(new THREE.CircleGeometry(CH_D / 2, 20, 0, Math.PI).rotateY(Math.PI / 2), woodDS, sx * CH_W / 2, 0, CH_D / 2, hinge);
     add(new THREE.CylinderGeometry(CH_D / 2 + .003, CH_D / 2 + .003, .022, 20, 1, true, 0, Math.PI).rotateZ(Math.PI / 2), goldDS, sx * CH_W * .3, 0, CH_D / 2, hinge);
   }
   add(new THREE.BoxGeometry(.03, .04, .012), gold, 0, .012, CH_D + .004, hinge);                          // lock
-  const shaft = add(new THREE.CylinderGeometry(.04, .09, .5, 16, 1, true), new THREE.MeshBasicMaterial({ color: glowCol, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }), 0, CH_H + .26, 0);
-  shaft.visible = false; g.userData = { hinge, angle: 0, target: 0, closeAt: 0, shaft };
+  const shaft = makeShaft(glowCol, CH_H); g.add(shaft);
+  g.userData = { kind, glow: glowCol, hinge, angle: 0, target: 0, closeAt: 0, shaft, top: CH_H };
   return g;
 }
-const chestA = makeChest(0x23406b, 0x4db8ff), chestB = makeChest(0x6b1f2a, 0xffd34d), chests = [chestA, chestB];   // A = facts, B = treasure
-[[chestA, -.6], [chestB, .6]].forEach(([c, x]) => { c.position.set(x, .004, .75); c.rotation.y = Math.atan2(-x, .75); world.add(c); });   // face the player
+// 1 = facts, 2 = Bathukamma flowers, 3 = lac bangles, 4 = pearls (cubes open them in this order, then it repeats)
+const CHEST_DEFS = [
+  { kind: 'fact',   wood: 0x23406b, glow: 0x4db8ff, x: -.78, z: .65 },
+  { kind: 'flower', wood: 0x7a1f4d, glow: 0xff6bb5, x: -.3,  z: .9 },
+  { kind: 'bangle', wood: 0x4b2a7a, glow: 0xb388ff, x: .3,   z: .9 },
+  { kind: 'pearl',  wood: 0x1f5f66, glow: 0xfff3d0, x: .78,  z: .65 }];
+const chests = CHEST_DEFS.map(d => { const c = makeChest(d.wood, d.glow, d.kind); c.position.set(d.x, .004, d.z); c.rotation.y = Math.atan2(-d.x, 1.5 - d.z); world.add(c); return c; });   // all face the player
+const chestA = chests[0];
 const holoMat = new THREE.MeshBasicMaterial({ color: 0x55ddff, wireframe: true, transparent: true, opacity: .85 });
 const holo = fallbackCharminar(); holo.traverse(o => { if (o.isMesh) o.material = holoMat; });                // little 3D hologram of Charminar over the fact chest
 holo.scale.setScalar(.1); holo.position.y = CH_H + .06; holo.visible = false; chestA.add(holo);
+
+// ---- your own chest model: find the lid, pivot it on its back edge, copy it onto every chest ----
+const pathTo = (root, node) => { const p = []; for (let o = node; o !== root; o = o.parent) p.unshift(o.parent.children.indexOf(o)); return p; };
+const byPath = (root, p) => p.reduce((o, i) => o.children[i], root);
+function prepareChest(tmpl) {                                // tmpl is already scaled, centred and sitting on y = 0, front facing +Z
+  tmpl.updateMatrixWorld(true);
+  const all = new THREE.Box3().setFromObject(tmpl), H = all.max.y - all.min.y; let lid = null;
+  const named = re => tmpl.traverse(o => { if (!lid && o !== tmpl && re.test(o.name)) lid = o; });
+  named(/lid|cap|cover/i); if (!lid) named(/top/i);
+  if (!lid) {                                                // unnamed parts: take the highest separate part as the lid
+    let node = tmpl; while (node.children.length === 1) node = node.children[0];
+    if (node.children.length > 1) { let best = null, bc = -1e9;
+      for (const c of node.children) { const b = new THREE.Box3().setFromObject(c), cy = (b.min.y + b.max.y) / 2; if (cy > bc) { bc = cy; best = c; } }
+      if (bc > all.min.y + H * .6) lid = best; }
+  }
+  if (!lid) return null;
+  const lb = new THREE.Box3().setFromObject(lid);
+  return { path: pathTo(tmpl, lid), hinge: new THREE.Vector3((lb.min.x + lb.max.x) / 2, lb.min.y, lb.min.z), top: all.max.y };
+}
+function skinChest(ch, tmpl, info) {
+  const u = ch.userData;
+  for (const c of [...ch.children]) if (c !== holo) ch.remove(c);                    // drop the built-in parts
+  const root = tmpl.clone(true), lid = byPath(root, info.path), hinge = new THREE.Group();
+  hinge.position.copy(info.hinge); root.add(hinge); hinge.attach(lid); ch.add(root);   // lid now rotates around its back edge
+  u.hinge = hinge; u.top = info.top; u.shaft = makeShaft(u.glow, info.top); ch.add(u.shaft);
+}
 
 // fact card above the fact chest
 const factC = Object.assign(document.createElement('canvas'), { width: 1024, height: 640 }), fx = factC.getContext('2d');
@@ -572,30 +611,35 @@ function makeItem(kind) {
   const r = Math.random();
   return kind === 'flower' ? new THREE.Mesh(flowerGeo, flowerMats[r * 3 | 0]) : kind === 'pearl' ? new THREE.Mesh(pearlGeo, pearlMat) : new THREE.Mesh(bangleGeo, bangleMats[r * 4 | 0]);
 }
-function spillTreasure(ch) {
-  let total = 0; const b = ch.position, toP = new THREE.Vector3(0 - b.x, 0, 1.5 - b.z).normalize();
-  for (let i = 0; i < 14; i++) {
-    const r = Math.random(), kind = r < .5 ? 'flower' : r < .75 ? 'pearl' : 'bangle', val = { flower: 30, pearl: 10, bangle: 20 }[kind]; total += val;
-    const m = makeItem(kind); m.position.set(b.x, CH_H + .08, b.z); m.visible = false; world.add(m);
-    items.push({ m, val, age: 0, delay: i * .07, from: null, spin: new THREE.Vector3(Math.random() * 4, Math.random() * 4, 0),
+const SPILL = { flower: { n: 10, val: 30, label: 'FLOWERS' }, bangle: { n: 12, val: 20, label: 'BANGLES' }, pearl: { n: 18, val: 15, label: 'PEARLS' } };
+const LOOT = {
+  flower: ['🌸 Bathukamma flowers!', 'Bathukamma is Telangana’s festival of flowers: women stack seasonal blooms into a tiered mound and sing around it.'],
+  bangle: ['✨ Lac bangles!', 'Laad Bazaar, next to Charminar, is famous for sparkling lac bangles studded with stones.'],
+  pearl: ['📿 City of Pearls!', 'Hyderabad is called the City of Pearls: pearl jewellery has been traded here for centuries.']
+};
+function spillTreasure(ch, kind) {                           // every item of ONE kind spills out and flies to the player
+  const { n, val } = SPILL[kind], b = ch.position, top = ch.userData.top, toP = new THREE.Vector3(-b.x, 0, 1.5 - b.z).normalize();
+  for (let i = 0; i < n; i++) {
+    const m = makeItem(kind); m.position.set(b.x, top + .08, b.z); m.visible = false; world.add(m);
+    items.push({ m, val, age: 0, delay: i * .06, from: null, spin: new THREE.Vector3(Math.random() * 4, Math.random() * 4, 0),
       v: new THREE.Vector3((Math.random() - .5) * .9 + toP.x * .5, 1.5 + Math.random() * .9, (Math.random() - .5) * .9 + toP.z * .5) });
   }
-  return total;
+  return n * val;
 }
 function openChest(ch) {
   const u = ch.userData; u.target = OPEN; jingle([659, 880, 1047, 1319], 'triangle', .08);
-  if (ch === chestA) {
+  if (u.kind === 'fact') {
     const [title, body] = FACTS[factIdx++ % FACTS.length]; drawFact(title, body); factCard.visible = true; factT = 0; holo.visible = true;
     u.closeAt = clock.elapsedTime + 16; showToast('📜 ' + title, body, 15000); flash('CHEST OPENED: FACT!');
   } else {
-    const total = spillTreasure(ch); u.closeAt = clock.elapsedTime + 6; flash(`TREASURE +${total}`);
-    showToast('🌸 Bathukamma treasure!', `Flowers, pearls and lac bangles – a Hyderabad tradition – spill out: +${total} points!`, 7000);
+    const total = spillTreasure(ch, u.kind), [title, text] = LOOT[u.kind]; u.closeAt = clock.elapsedTime + 6;
+    flash(`${SPILL[u.kind].label} +${total}`); showToast(title, `${text} +${total} points!`, 8000);
   }
 }
 function hitCube(c) {
   const wp = world.worldToLocal(c.getWorldPosition(new THREE.Vector3())); cubes.splice(cubes.indexOf(c), 1); world.remove(c);
   emit(wp, blueMat, 16, 2.2, .5, 1, null, 2); score += 50; sfxPop();
-  const ch = chests[chestSeq++ % 2], to = ch.position.clone().setY(CH_H + .05).sub(wp), d = to.length();
+  const ch = chests[chestSeq++ % chests.length], to = ch.position.clone().setY(ch.userData.top + .05).sub(wp), d = to.length();
   emit(wp, blueMat, 18, d / .8, .8, 0, to.normalize(), 1.5);                // blue sparks fly to the chest that opens
   openChest(ch);
 }
@@ -911,7 +955,7 @@ renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05); if
       camera.position.set(c.x + Math.sin(orbitA) * D, 1.6, c.z + Math.cos(orbitA) * D);   // circle Charminar
       camera.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), orbitA).multiply(gyroQ); } renderer.render(scene, camera); });
 (async () => {
-  const [a, b] = await Promise.all([loadModel(CFG.charminarFile), loadModel(CFG.ufoFile)]);
+  const [a, b, chestSrc] = await Promise.all([loadModel(CFG.charminarFile), loadModel(CFG.ufoFile), loadModel(CFG.chestFile, true)]);
   const c = a || fallbackCharminar(); rot(c, CFG.charminarRot); cmModel = fit(c, CFG.charminarHeight, false); cm.add(cmModel);
   // Fast ray-casting: build a BVH per mesh (a raw ray test on a big FBX freezes the page)
   scene.updateMatrixWorld(true); cmModel.updateMatrixWorld(true);
@@ -929,8 +973,15 @@ renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05); if
     rayTarget.position.copy(bb.getCenter(new THREE.Vector3())); rayTarget.updateMatrixWorld(true);
   }
   const u = b || fallbackUFO(); rot(u, CFG.ufoRot); ufoBody = fit(u, CFG.ufoWidth, true); ufo.add(ufoBody);
+  let chestMsg = 'built-in chests';
+  if (chestSrc) {                                           // your chest model: one template, instanced for every chest
+    try { rot(chestSrc, CFG.chestRot); const tmpl = fit(chestSrc, CFG.chestWidth, true), info = prepareChest(tmpl);
+      if (info) { chests.forEach(ch => skinChest(ch, tmpl, info)); holo.position.y = chests[0].userData.top + .06; chestMsg = `Chest model loaded (x${chests.length})`; }
+      else chestMsg = 'Chest model has no separate lid (name the lid object "Lid") – using built-in chests';
+    } catch (e) { console.warn(e); chestMsg = 'Chest model failed (' + (e.message || e) + ') – using built-in chests'; }
+  }
   document.getElementById('status').textContent =
-    (a ? 'Charminar model loaded' : 'Charminar model not found – using placeholder') + ' · ' + (b ? 'UFO model loaded' : 'UFO model not found – using placeholder');
+    (a ? 'Charminar model loaded' : 'Charminar model not found – using placeholder') + ' · ' + (b ? 'UFO model loaded' : 'UFO model not found – using placeholder') + ' · ' + chestMsg;
   if (loadErrors.length) { const st = document.getElementById('status'); st.style.whiteSpace = 'pre-line'; st.style.color = '#ffd0d0';
     st.style.background = 'rgba(120,0,0,.6)'; st.textContent += '\n' + loadErrors.join('\n'); }
   scene.updateMatrixWorld(true); ready = true; setState('menu');
