@@ -9,7 +9,7 @@
   #motionBtn{position:fixed;left:12px;bottom:14px;z-index:30;display:none;padding:12px 16px;font-size:15px;border:0;border-radius:24px;background:#1e88e5;color:#fff;box-shadow:0 2px 10px #0006}
   #orbitUI{position:fixed;right:12px;bottom:14px;z-index:30;display:none;gap:10px;align-items:center;color:#fff;font-size:13px;text-shadow:0 0 6px #000}
   #orbitUI button{width:60px;height:60px;border:0;border-radius:50%;font-size:26px;background:#1e88e5;color:#fff;box-shadow:0 2px 10px #0006;touch-action:none;user-select:none}
-  #bar{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;display:flex;gap:8px;align-items:center;white-space:nowrap;padding:6px 10px;border-radius:22px;background:#0a1030cc;color:#fff;font-size:13px;z-index:25;max-width:96vw}
+  #bar{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;padding:6px 10px;border-radius:22px;background:#0a1030cc;color:#fff;font-size:13px;z-index:25;max-width:96vw}
   #bar button{padding:6px 11px;border:0;border-radius:16px;font-size:13px;background:#1e88e5;color:#fff}
   #bar button:disabled{opacity:.5}
   #playBtn{background:#2e9e5b!important}
@@ -21,6 +21,8 @@
   #title .hint{font-size:13px;opacity:.75}
   #titleStart{margin-top:14px;padding:14px 40px;font-size:20px;border:0;border-radius:30px;background:#39ff88;color:#052;font-weight:700}
   #titleStart:disabled{opacity:.5}
+  #fact{position:fixed;top:44px;left:50%;transform:translateX(-50%);display:none;width:min(92vw,480px);padding:12px 16px;border-radius:14px;background:#0e1640ee;border:2px solid #ffd34d;color:#fff;font-size:15px;line-height:1.4;z-index:22;box-shadow:0 6px 30px #000a}
+  #fact b{display:block;color:#ffd34d;font-size:17px;margin-bottom:4px}
   #status{position:fixed;top:6px;left:8px;right:8px;text-align:left;font-size:11px;opacity:.55;pointer-events:none;z-index:5}
 </style>
 <script type="importmap">
@@ -35,11 +37,13 @@
 <div id="title"><div class="card">
   <h1>🛸 Save Charminar!</h1>
   <p>Aliens are sticking to Charminar! Smash <b>70</b> of them before <b>100</b> cover it – or the UFO takes Charminar away.</p>
+  <p>🟦 Shoot the <b>blue cubes</b> to open treasure chests – learn about Charminar and win Bathukamma flowers, pearls &amp; bangles for bonus points!</p>
   <p class="hint">🥽 Quest 3: tap <b>ENTER VR</b>. Right hand = shotgun (trigger / pinch). Left hand = grab &amp; sweep sideways to spin Charminar.<br>
   📱 Phone: tap <b>Enable motion sensor</b>, look around, ◀ ▶ to walk, tap aliens.<br>🖥️ Desktop: drag to look around, click aliens.</p>
   <button id="titleStart" disabled>Loading…</button>
 </div></div>
 <div id="status">Loading models…</div>
+<div id="fact"><b id="factTitle"></b><span id="factTxt"></span></div>
 <div id="bar"><span id="barTxt"></span><button id="playBtn" disabled>START</button><button id="musicBtn">🔊</button><button id="exitBtn">✕ Exit</button></div>
 <div id="orbitUI"><button id="orbL">◀</button><span>walk<br>around</span><button id="orbR">▶</button></div>
 <button id="motionBtn">📱 Enable motion sensor</button>
@@ -53,6 +57,8 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /* ───────────── SETTINGS (tweak freely) ───────────── */
 const CFG = {
@@ -256,22 +262,31 @@ function fallbackUFO() {
 
 /* ───────────── Bubble assets ───────────── */
 const R = CFG.bubbleR;
-const bGeo = new THREE.SphereGeometry(R, 20, 14), eyeGeo = new THREE.SphereGeometry(R * .26, 10, 8),
-      pupGeo = new THREE.SphereGeometry(R * .13, 8, 6), pGeo = new THREE.SphereGeometry(.02, 6, 4);
-const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff }), pupMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
-const bMats = [0x39ff88, 0x66e0ff, 0xff6fd8, 0xd6ff3a].map(c => new THREE.MeshStandardMaterial({
-  color: c, emissive: c, emissiveIntensity: .35, transparent: true, opacity: .75, roughness: .15 }));
+const colorGeo = (g, hex) => { const c = new THREE.Color(hex), n = g.attributes.position.count, a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; } g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
+const spikyGeo = (() => {                                   // red ball + 26 spikes, merged into ONE geometry shared by every alien
+  const geos = [new THREE.SphereGeometry(R, 20, 14)], n = 26, up = new THREE.Vector3(0, 1, 0), m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
+  for (let i = 0; i < n; i++) {
+    const y = 1 - 2 * (i + .5) / n, r = Math.sqrt(1 - y * y), a = i * 2.39996, d = new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r);
+    if (d.z > .7) continue;                                 // keep the face clear
+    const h = R * .6, cone = new THREE.ConeGeometry(R * .17, h, 7);
+    q.setFromUnitVectors(up, d); p.copy(d).multiplyScalar(R * .9 + h / 2); cone.applyMatrix4(m.compose(p, q, one)); geos.push(cone);
+  }
+  return mergeGeometries(geos);
+})();
+const eyesGeo = (() => { const gs = [];                     // angry yellow eyes + black pupils + brows (vertex colours)
+  for (const s of [-1, 1]) {
+    gs.push(colorGeo(new THREE.SphereGeometry(R * .27, 10, 8).translate(s * R * .32, R * .2, R * .8), 0xfff27a));
+    gs.push(colorGeo(new THREE.SphereGeometry(R * .13, 8, 6).translate(s * R * .32, R * .2, R * 1.0), 0x111111));
+    gs.push(colorGeo(new THREE.BoxGeometry(R * .42, R * .08, R * .08).rotateZ(s * .45).translate(s * R * .32, R * .52, R * .9), 0x111111));
+  }
+  return mergeGeometries(gs); })();
+const alienMat = new THREE.MeshStandardMaterial({ color: 0xd91414, emissive: 0xff2020, emissiveIntensity: .45, roughness: .45 });
+const eyesMat = new THREE.MeshBasicMaterial({ vertexColors: true });
+const pGeo = new THREE.SphereGeometry(.02, 6, 4);
 const bubbles = [], parts = [];
 
-function makeBubble() {
-  const g = new THREE.Group();
-  g.add(new THREE.Mesh(bGeo, bMats[Math.random() * 4 | 0]));
-  for (const s of [-1, 1]) {
-    const e = new THREE.Mesh(eyeGeo, eyeMat); e.position.set(s * R * .3, R * .2, R * .82); g.add(e);
-    const p = new THREE.Mesh(pupGeo, pupMat); p.position.set(s * R * .3, R * .2, R * 1.02); g.add(p);
-  }
-  return g;
-}
+function makeBubble() { const g = new THREE.Group(); g.add(new THREE.Mesh(spikyGeo, alienMat), new THREE.Mesh(eyesGeo, eyesMat)); return g; }
 
 /* ───────────── Spawning onto the Charminar surface ───────────── */
 const ray = new THREE.Raycaster(); ray.firstHitOnly = true;
@@ -330,7 +345,7 @@ function pop(b, silent) {
     const m = new THREE.Mesh(pGeo, mat); m.position.copy(wp); world.add(m);
     parts.push({ m, life: .5, v: new THREE.Vector3(Math.random() - .5, Math.random() - .2, Math.random() - .5).multiplyScalar(1.6) });
   }
-  if (!silent) { sfxPop(); smashed++; }
+  if (!silent) { sfxPop(); smashed++; score += 10; }
 }
 
 /* ───────────── Hands & controllers ───────────── */
@@ -432,6 +447,7 @@ function shoot(c) {
   if (state !== 'playing') return;
 
   const wps = bubbles.map(b => b.getWorldPosition(new THREE.Vector3())), popped = new Set();
+  const cubeW = cubes.map(c => c.getWorldPosition(new THREE.Vector3())), hitCubes = new Set();
   for (let p = 0; p < 12; p++) {                                              // 9 pellets: 1 centre + 8 spread
     const dir = new THREE.Vector3(0, 0, -1);
     if (p) { const r = .061 * Math.sqrt(Math.random()), a = Math.random() * 6.283; dir.set(Math.cos(a) * r, Math.sin(a) * r, -1).normalize(); }
@@ -444,10 +460,12 @@ function shoot(c) {
       if (t > 0 && t < bt && t < surf + R * CFG.worldScale * 1.5 && v.lengthSq() - t * t < rr * rr) { best = i; bt = t; }
     }
     const len = best >= 0 ? bt : Math.min(surf, 6);
+    cubes.forEach((c, ci) => { const v = cubeW[ci].clone().sub(origin), t = v.dot(dir);
+      if (t > 0 && t < surf + 1 && v.lengthSq() - t * t < (CUBE_R * CFG.worldScale * c.scale.x * 1.15) ** 2) hitCubes.add(c); });
     const m = new THREE.Mesh(tracerGeo, shotMat); m.position.copy(origin); m.lookAt(origin.clone().add(dir)); m.scale.z = len; scene.add(m); tracers.push({ m, life: .08 });
     if (best >= 0) popped.add(best);
   }
-  const hit = [...popped].map(i => bubbles[i]); hit.forEach(b => pop(b));   // pop() updates score + sound
+  const hit = [...popped].map(i => bubbles[i]); hit.forEach(b => pop(b)); [...hitCubes].forEach(hitCube);   // pop() updates score + sound
 }
 
 function vrUpdate(dt) {
@@ -467,20 +485,174 @@ function vrUpdate(dt) {
     if (gp && !c.userData.src.hand) { const x = gp.axes[2] ?? gp.axes[0] ?? 0; if (Math.abs(x) > .2) cm.rotation.y += x * dt * 1.8; } }
 }
 
+/* ───────────── Bonus: blue cubes open the Hyderabad chests (facts + Bathukamma treasure) ───────────── */
+const CH_W = .24, CH_H = .12, CH_D = .16, OPEN = THREE.MathUtils.degToRad(120), CUBE_R = .11;
+const blueMat = new THREE.MeshBasicMaterial({ color: 0x4db8ff }), goldMat = new THREE.MeshBasicMaterial({ color: 0xffd34d });
+const cubeGeo = new RoundedBoxGeometry(.14, .14, .14, 4, .03), coreGeo = new RoundedBoxGeometry(.08, .08, .08, 3, .02);
+const cubeMat = new THREE.MeshStandardMaterial({ color: 0x1e90ff, emissive: 0x1e90ff, emissiveIntensity: .5, roughness: .1, metalness: .2, transparent: true, opacity: .8 });
+const coreMat = new THREE.MeshBasicMaterial({ color: 0xbfe6ff });
+const cubes = [], items = [], VC = new THREE.Vector3(), UPV = new THREE.Vector3(0, 1, 0);
+
+const FACTS = [
+  ['Charminar · built in 1591', 'Charminar was built in 1591 by Muhammad Quli Qutb Shah. Its name means “four minarets”: four grand arches and four towering minarets, built with granite and lime mortar. It was raised after the Qutb Shahi capital moved from Golconda to Hyderabad.'],
+  ['Laad Bazaar', 'The lanes around Charminar hold Laad Bazaar, famous for sparkling lac bangles studded with stones and pearls.'],
+  ['City of Pearls', 'Hyderabad is known as the “City of Pearls”. Pearl trading flourished here for centuries, and Hyderabadi pearl jewellery is still prized.'],
+  ['Bathukamma', 'Bathukamma is Telangana’s festival of flowers. Women stack seasonal blooms into a tall, tiered mound, then sing and dance around it.'],
+  ['Golconda', 'Before Hyderabad, the Qutb Shahi capital was Golconda, a fort-city famed for its diamond trade.']
+];
+
+// chests lying on the ground: a lower part and a lid that opens 120°
+function makeChest(woodCol, glowCol) {
+  const g = new THREE.Group(), wood = new THREE.MeshStandardMaterial({ color: woodCol, roughness: .8 }),
+    gold = new THREE.MeshStandardMaterial({ color: 0xd4a62a, metalness: .8, roughness: .35, emissive: 0x3a2a00 });
+  const woodDS = wood.clone(), goldDS = gold.clone(); woodDS.side = goldDS.side = THREE.DoubleSide;
+  const add = (geo, mat, x, y, z, parent = g) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m; };
+  add(new THREE.BoxGeometry(CH_W, CH_H, CH_D), wood, 0, CH_H / 2, 0);
+  for (const y of [.018, CH_H - .014]) add(new THREE.BoxGeometry(CH_W + .008, .016, CH_D + .008), gold, 0, y, 0);
+  add(new THREE.BoxGeometry(CH_W - .02, .004, CH_D - .02), new THREE.MeshStandardMaterial({ color: 0x7a1020, roughness: 1 }), 0, CH_H + .001, 0);   // velvet lining
+  const hinge = new THREE.Group(); hinge.position.set(0, CH_H, -CH_D / 2); g.add(hinge);                  // lid turns around the back edge
+  const arch = r => new THREE.CylinderGeometry(r, r, 1, 20, 1, true, 0, Math.PI).rotateZ(Math.PI / 2);
+  add(new THREE.CylinderGeometry(CH_D / 2, CH_D / 2, CH_W, 20, 1, true, 0, Math.PI).rotateZ(Math.PI / 2), woodDS, 0, 0, CH_D / 2, hinge);
+  for (const sx of [-1, 1]) {
+    add(new THREE.CircleGeometry(CH_D / 2, 20, 0, Math.PI).rotateY(Math.PI / 2), woodDS, sx * CH_W / 2, 0, CH_D / 2, hinge);
+    add(new THREE.CylinderGeometry(CH_D / 2 + .003, CH_D / 2 + .003, .022, 20, 1, true, 0, Math.PI).rotateZ(Math.PI / 2), goldDS, sx * CH_W * .3, 0, CH_D / 2, hinge);
+  }
+  add(new THREE.BoxGeometry(.03, .04, .012), gold, 0, .012, CH_D + .004, hinge);                          // lock
+  const shaft = add(new THREE.CylinderGeometry(.04, .09, .5, 16, 1, true), new THREE.MeshBasicMaterial({ color: glowCol, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }), 0, CH_H + .26, 0);
+  shaft.visible = false; g.userData = { hinge, angle: 0, target: 0, closeAt: 0, shaft };
+  return g;
+}
+const chestA = makeChest(0x23406b, 0x4db8ff), chestB = makeChest(0x6b1f2a, 0xffd34d), chests = [chestA, chestB];   // A = facts, B = treasure
+[[chestA, -.6], [chestB, .6]].forEach(([c, x]) => { c.position.set(x, .004, .75); c.rotation.y = Math.atan2(-x, .75); world.add(c); });   // face the player
+const holoMat = new THREE.MeshBasicMaterial({ color: 0x55ddff, wireframe: true, transparent: true, opacity: .85 });
+const holo = fallbackCharminar(); holo.traverse(o => { if (o.isMesh) o.material = holoMat; });                // little 3D hologram of Charminar over the fact chest
+holo.scale.setScalar(.1); holo.position.y = CH_H + .06; holo.visible = false; chestA.add(holo);
+
+// fact card above the fact chest
+const factC = Object.assign(document.createElement('canvas'), { width: 1024, height: 640 }), fx = factC.getContext('2d');
+const factTex = new THREE.CanvasTexture(factC); factTex.colorSpace = THREE.SRGBColorSpace;
+const factCard = new THREE.Mesh(new THREE.PlaneGeometry(.56, .35), new THREE.MeshBasicMaterial({ map: factTex, toneMapped: false, transparent: true }));
+factCard.position.set(chestA.position.x, .52, chestA.position.z); factCard.visible = false; world.add(factCard);
+function drawFact(title, body) {
+  fx.clearRect(0, 0, 1024, 640); fx.fillStyle = 'rgba(10,20,60,.94)'; fx.beginPath(); fx.roundRect(6, 6, 1012, 628, 40); fx.fill();
+  fx.strokeStyle = '#ffd34d'; fx.lineWidth = 8; fx.stroke(); fx.textAlign = 'left'; fx.textBaseline = 'alphabetic';
+  fx.fillStyle = '#ffd34d'; fx.font = 'bold 54px system-ui'; fx.fillText(title, 48, 92);
+  fx.fillStyle = '#fff'; fx.font = '40px system-ui';
+  let line = '', y = 170; for (const w of body.split(' ')) { const t = line + w + ' '; if (fx.measureText(t).width > 930 && line) { fx.fillText(line, 48, y); line = w + ' '; y += 54; } else line = t; } fx.fillText(line, 48, y);
+  fx.fillStyle = '#7dd3ff'; fx.font = '30px system-ui'; fx.fillText('Shoot the next blue cube to open another chest!', 48, 605); factTex.needsUpdate = true;
+}
+let toastTimer = 0;
+function showToast(title, text, ms) {                       // phone / desktop: fact shown at the top of the screen
+  $('factTitle').textContent = title; $('factTxt').textContent = text; $('fact').style.display = 'block';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('fact').style.display = 'none'; }, ms);
+}
+function flash(t, secs = 3.5) { flashMsg = t; flashUntil = clock.elapsedTime + secs; hudKey = ''; domKey = ''; }
+
+// particles
+function emit(pos, mat, n = 9, speed = 1.6, life = .5, g = 2, dirTo = null, sz = 1) {
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(pGeo, mat), v = new THREE.Vector3(Math.random() - .5, Math.random() - .2, Math.random() - .5);
+    if (dirTo) v.multiplyScalar(.25).addScaledVector(dirTo, 1); else v.multiplyScalar(speed);
+    if (dirTo) v.multiplyScalar(speed); m.position.copy(pos); world.add(m); parts.push({ m, v, life, max: life, g, sz });
+  }
+}
+
+// bathukamma flower (stacked petals, vertex-coloured), pearl, lac bangle
+const flowerGeo = (() => { const gs = [], U = 1.7;
+  const petal = (a, c, tilt, y, hex, ang) => gs.push(colorGeo(new THREE.SphereGeometry(1, 8, 6).scale(a * U, a * .45 * U, c * U).translate(0, 0, c * .9 * U).rotateX(-tilt).translate(0, y * U, 0).rotateY(ang), hex));
+  for (let i = 0; i < 10; i++) petal(.016, .032, .15, 0, 0xff3d9a, i / 10 * 6.2832);
+  for (let i = 0; i < 6; i++) petal(.012, .02, .55, .005, 0xffd23f, i / 6 * 6.2832 + .3);
+  gs.push(colorGeo(new THREE.SphereGeometry(.011 * U, 10, 8).translate(0, .012 * U, 0), 0xffffff));
+  return mergeGeometries(gs); })();
+const flowerMats = [0xffffff, 0xffd9ec, 0xfff0b8].map(c => new THREE.MeshStandardMaterial({ vertexColors: true, color: c, emissive: 0x662244, emissiveIntensity: .55, roughness: .5, side: THREE.DoubleSide }));
+const pearlGeo = new THREE.SphereGeometry(.04, 16, 12), pearlMat = new THREE.MeshStandardMaterial({ color: 0xf5f3ee, emissive: 0x555555, emissiveIntensity: .5, roughness: .15, metalness: .1 });
+const bangleGeo = new THREE.TorusGeometry(.05, .011, 8, 24);
+const bangleMats = [0xd81b60, 0x1db954, 0xffc107, 0x7e57c2].map(c => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: .45, roughness: .3, metalness: .4 }));
+function makeItem(kind) {
+  const r = Math.random();
+  return kind === 'flower' ? new THREE.Mesh(flowerGeo, flowerMats[r * 3 | 0]) : kind === 'pearl' ? new THREE.Mesh(pearlGeo, pearlMat) : new THREE.Mesh(bangleGeo, bangleMats[r * 4 | 0]);
+}
+function spillTreasure(ch) {
+  let total = 0; const b = ch.position, toP = new THREE.Vector3(0 - b.x, 0, 1.5 - b.z).normalize();
+  for (let i = 0; i < 14; i++) {
+    const r = Math.random(), kind = r < .5 ? 'flower' : r < .75 ? 'pearl' : 'bangle', val = { flower: 30, pearl: 10, bangle: 20 }[kind]; total += val;
+    const m = makeItem(kind); m.position.set(b.x, CH_H + .08, b.z); m.visible = false; world.add(m);
+    items.push({ m, val, age: 0, delay: i * .07, from: null, spin: new THREE.Vector3(Math.random() * 4, Math.random() * 4, 0),
+      v: new THREE.Vector3((Math.random() - .5) * .9 + toP.x * .5, 1.5 + Math.random() * .9, (Math.random() - .5) * .9 + toP.z * .5) });
+  }
+  return total;
+}
+function openChest(ch) {
+  const u = ch.userData; u.target = OPEN; jingle([659, 880, 1047, 1319], 'triangle', .08);
+  if (ch === chestA) {
+    const [title, body] = FACTS[factIdx++ % FACTS.length]; drawFact(title, body); factCard.visible = true; factT = 0; holo.visible = true;
+    u.closeAt = clock.elapsedTime + 16; showToast('📜 ' + title, body, 15000); flash('CHEST OPENED: FACT!');
+  } else {
+    const total = spillTreasure(ch); u.closeAt = clock.elapsedTime + 6; flash(`TREASURE +${total}`);
+    showToast('🌸 Bathukamma treasure!', `Flowers, pearls and lac bangles – a Hyderabad tradition – spill out: +${total} points!`, 7000);
+  }
+}
+function hitCube(c) {
+  const wp = world.worldToLocal(c.getWorldPosition(new THREE.Vector3())); cubes.splice(cubes.indexOf(c), 1); world.remove(c);
+  emit(wp, blueMat, 16, 2.2, .5, 1, null, 2); score += 50; sfxPop();
+  const ch = chests[chestSeq++ % 2], to = ch.position.clone().setY(CH_H + .05).sub(wp), d = to.length();
+  emit(wp, blueMat, 18, d / .8, .8, 0, to.normalize(), 1.5);                // blue sparks fly to the chest that opens
+  openChest(ch);
+}
+function spawnCube() {
+  const c = new THREE.Group(); c.add(new THREE.Mesh(cubeGeo, cubeMat), new THREE.Mesh(coreGeo, coreMat));
+  c.position.copy(ufo.position); c.position.y -= .12; c.scale.setScalar(.2); world.add(c);
+  c.userData = { kind: 'cube', state: 'fly', t: 0, dur: 1.6, age: 0, from: c.position.clone(), phase: Math.random() * 6.28,
+    to: new THREE.Vector3(Math.random() * 1.8 - .9, .4 + Math.random() * .35, .8 + Math.random() * .3) };
+  cubes.push(c); flash('BLUE CUBE! SHOOT IT'); jingle([880, 1175], 'sine', .1);
+}
+function resetBonus() {
+  for (const c of cubes) world.remove(c); cubes.length = 0; for (const it of items) world.remove(it.m); items.length = 0;
+  for (const ch of chests) { Object.assign(ch.userData, { angle: 0, target: 0, closeAt: 0 }); ch.userData.hinge.rotation.x = 0; ch.userData.shaft.visible = false; }
+  factCard.visible = false; holo.visible = false; chestSeq = 0; factIdx = 0; cubeT = 10; flashMsg = ''; clearTimeout(toastTimer); $('fact').style.display = 'none';
+}
+function bonusUpdate(dt, time) {
+  if (state === 'playing' && !cubes.length && (cubeT -= dt) <= 0) { spawnCube(); cubeT = 14 + Math.random() * 8; }
+  if (state === 'won' || state === 'lost') { for (const c of cubes) world.remove(c); cubes.length = 0; }
+  for (const c of [...cubes]) { const u = c.userData; u.age += dt;
+    if (u.state === 'fly') { u.t += dt / u.dur; const k = Math.min(u.t, 1), e = k * k * (3 - 2 * k);
+      c.position.lerpVectors(u.from, u.to, e); c.position.y += Math.sin(Math.PI * k) * .25; c.scale.setScalar(.2 + .8 * e);
+      if (k >= 1) { u.state = 'hover'; u.age = 0; u.base = c.position.clone(); } }
+    else if (u.state === 'hover') { c.position.y = u.base.y + Math.sin(time * 2 + u.phase) * .04; if (u.age > 9) { u.state = 'leave'; u.age = 0; u.base = c.position.clone(); } }
+    else { const k = Math.min(u.age / 1.2, 1); c.position.copy(u.base).addScaledVector(UPV, k * k * 3); c.scale.setScalar(Math.max(1 - k, .01));
+      if (k >= 1) { world.remove(c); cubes.splice(cubes.indexOf(c), 1); } }
+    c.rotation.y += dt * 1.5; c.rotation.x = Math.sin(time * 1.2 + u.phase) * .35;
+  }
+  for (const ch of chests) { const u = ch.userData;
+    if (u.target && time > u.closeAt) u.target = 0;
+    u.angle += (u.target - u.angle) * (1 - Math.exp(-7 * dt)); u.hinge.rotation.x = -u.angle;
+    const k = u.angle / OPEN; u.shaft.visible = k > .05; u.shaft.material.opacity = .3 * k * (.75 + .25 * Math.sin(time * 6)); }
+  if (factCard.visible) { factT += dt; factCard.scale.setScalar(Math.max(Math.min(factT * 3, 1), .01)); camera.getWorldPosition(VC); factCard.lookAt(VC);
+    holo.rotation.y += dt; if (factT > 16) { factCard.visible = false; holo.visible = false; } }
+  if (items.length) { camera.getWorldPosition(VC); const tgt = world.worldToLocal(VC); tgt.y -= .03;           // treasure flies to you, then adds points
+    for (let i = items.length - 1; i >= 0; i--) { const it = items[i]; it.age += dt; if (it.age < it.delay) continue;
+      const a = it.age - it.delay; it.m.visible = true; it.m.rotation.x += it.spin.x * dt; it.m.rotation.y += it.spin.y * dt;
+      if (a < 1.1) { it.v.y -= 1.6 * dt; it.m.position.addScaledVector(it.v, dt); if (it.m.position.y < .06) { it.m.position.y = .06; it.v.y = Math.abs(it.v.y) * .4; } }
+      else { it.from ??= it.m.position.clone(); const k = Math.min((a - 1.1) / .9, 1), e = k * k;
+        it.m.position.lerpVectors(it.from, tgt, e); it.m.scale.setScalar(1 - .75 * e);
+        if (k >= 1) { score += it.val; emit(it.m.position, goldMat, 5, 1, .4, 0); world.remove(it.m); items.splice(i, 1); if (actx) tone('sine', 1200 + Math.random() * 600, actx.currentTime, .15, .15, actx.destination); } } } }
+  if (flashMsg && time > flashUntil) { flashMsg = ''; hudKey = ''; domKey = ''; }
+}
+
 /* ───────────── HUD + start button ───────────── */
 const shown = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
 const hudC = Object.assign(document.createElement('canvas'), { width: 1024, height: 128 }), hx = hudC.getContext('2d');
 const hudTex = new THREE.CanvasTexture(hudC); hudTex.colorSpace = THREE.SRGBColorSpace;
 const ui = new THREE.Group(); scene.add(ui); ui.visible = false;       // VR score panel: ONE line, lower part of your view
-const hud = new THREE.Mesh(new THREE.PlaneGeometry(.72, .09), new THREE.MeshBasicMaterial({ map: hudTex, toneMapped: false, transparent: true }));
+const hud = new THREE.Mesh(new THREE.PlaneGeometry(.84, .105), new THREE.MeshBasicMaterial({ map: hudTex, toneMapped: false, transparent: true }));
 ui.add(hud);
 const SHORT = { arriving: 'UFO INCOMING', won: 'CHARMINAR SAVED!', lost: 'ABDUCTED!' };
 let hudKey = '';
 function drawHUD() {
-  const a = alive(), key = `${smashed}|${a}|${state}`; if (key === hudKey) return; hudKey = key;
+  const a = alive(), key = `${smashed}|${a}|${state}|${score}|${flashMsg}`; if (key === hudKey) return; hudKey = key;
   hx.clearRect(0, 0, 1024, 128); hx.fillStyle = 'rgba(8,14,40,.85)'; hx.beginPath(); hx.roundRect(4, 4, 1016, 120, 60); hx.fill();
   hx.strokeStyle = '#5ff'; hx.lineWidth = 4; hx.stroke(); hx.textBaseline = 'middle';
-  const parts = [...(SHORT[state] ? [[SHORT[state], '#ffe066']] : []), [`SMASH ${smashed}/${CFG.winAt}`, '#7dffb0'], [`ALIENS ${a}/${CFG.loseAt}`, '#ff8a8a']], gap = 40;
+  const parts = [...(SHORT[state] ? [[SHORT[state], '#ffe066']] : []), ...(flashMsg ? [[flashMsg, '#7dd3ff']] : []), [`SMASH ${smashed}/${CFG.winAt}`, '#7dffb0'], [`ALIENS ${a}/${CFG.loseAt}`, '#ff8a8a'], [`SCORE ${score}`, '#ffe066']], gap = 32;
   let fs = 44, w, total; const meas = () => { hx.font = `bold ${fs}px system-ui`; w = parts.map(p => hx.measureText(p[0]).width); total = w.reduce((x, y) => x + y, 0) + gap * (parts.length - 1); };
   meas(); if (total > 960) { fs = Math.floor(fs * 960 / total); meas(); }
   let x = (1024 - total) / 2; parts.forEach((p, i) => { hx.fillStyle = p[1]; hx.fillText(p[0], x, 68); x += w[i] + gap; });
@@ -497,7 +669,7 @@ function makeButton(text, color, r, px, py, w = .4, parent = ui) {
   g.userData.setLabel(text); parent.add(g); uiButtons.push(g); return g;
 }
 // buttons sit on the score panel line
-const exitB = makeButton('EXIT', 0xff4444, .035, -.5, 0, .22), btn = makeButton('START', 0x39ff88, .035, .5, 0, .3), musicB = makeButton('MUSIC', 0x4aa3ff, .035, .68, 0, .28);
+const exitB = makeButton('EXIT', 0xff4444, .035, -.58, 0, .22), btn = makeButton('START', 0x39ff88, .035, .58, 0, .3), musicB = makeButton('MUSIC', 0x4aa3ff, .035, .76, 0, .28);
 btn.userData.press = () => { audio(); startGame(); };
 exitB.userData.press = () => doExit();
 musicB.userData.press = () => toggleMusic();
@@ -505,8 +677,8 @@ musicB.userData.press = () => toggleMusic();
 const titleC = Object.assign(document.createElement('canvas'), { width: 1024, height: 640 }), titleTex = new THREE.CanvasTexture(titleC); titleTex.colorSpace = THREE.SRGBColorSpace;
 { const c = titleC.getContext('2d'); c.fillStyle = 'rgba(10,16,52,.94)'; c.beginPath(); c.roundRect(6, 6, 1012, 628, 48); c.fill(); c.strokeStyle = '#5ff'; c.lineWidth = 6; c.stroke();
   c.fillStyle = '#fff'; c.textAlign = 'center'; c.font = 'bold 72px system-ui'; c.fillText('Save Charminar!', 512, 110); c.font = '38px system-ui';
-  ['Aliens are sticking to Charminar!', 'Smash 70 of them before 100 cover it.', 'Right hand: shotgun (trigger / pinch).', 'Left hand: grab + sweep to spin Charminar.']
-    .forEach((l, i) => c.fillText(l, 512, 200 + i * 60)); titleTex.needsUpdate = true; }
+  ['Aliens are sticking to Charminar!', 'Smash 70 of them before 100 cover it.', 'Right hand: shotgun (trigger / pinch).', 'Left hand: grab + sweep to spin Charminar.', 'Shoot blue cubes: chests = facts + bonus!']
+    .forEach((l, i) => c.fillText(l, 512, 185 + i * 54)); titleTex.needsUpdate = true; }
 const titleCard = new THREE.Group(); scene.add(titleCard); titleCard.visible = false;
 titleCard.add(new THREE.Mesh(new THREE.PlaneGeometry(1.5, .94), new THREE.MeshBasicMaterial({ map: titleTex, toneMapped: false, transparent: true })));
 const startCard = makeButton('START', 0x39ff88, .08, 0, -.34, .5, titleCard);
@@ -534,13 +706,14 @@ beam.visible = false; world.add(beam);
 const PARK = new THREE.Vector3(3, 3.2, -6);
 const HOVER = new THREE.Vector3(CFG.charminarPos.x, CFG.charminarHeight + CFG.ufoHover, CFG.charminarPos.z);
 let state = 'menu', tState = 0, smashed = 0, spawnT = 0, playT = 0, endReady = false, btnReadyAt = 0;
+let score = 0, chestSeq = 0, factIdx = 0, factT = 0, cubeT = 10, flashMsg = '', flashUntil = 0;
 const alive = () => bubbles.length;
 function setState(s) { state = s; tState = 0; hudKey = ''; }
 function resetScene() {
   for (const b of [...bubbles]) b.parent.remove(b); bubbles.length = 0; grab = null;
   cm.position.copy(CFG.charminarPos); cm.rotation.set(0, 0, 0); cm.visible = true;
   ufo.visible = true; ufo.position.copy(PARK); beam.visible = false;
-  smashed = 0; playT = 0; endReady = false;
+  smashed = 0; score = 0; playT = 0; endReady = false; resetBonus();
 }
 function startGame() { resetScene(); setState('arriving'); }
 function toMenu() { resetScene(); setState('menu'); }
@@ -551,7 +724,7 @@ function endGame(s) {
 }
 
 function update(dt, time) {
-  tState += dt; collectPokers(); vrUpdate(dt); stars.rotation.y += dt * .004;
+  tState += dt; collectPokers(); vrUpdate(dt); stars.rotation.y += dt * .004; bonusUpdate(dt, time);
   if (ufoBody) ufoBody.rotation.y += dt * (state === 'won' ? 10 : 1.2);
   ufoLight.intensity = ufo.visible && state !== 'menu' ? 300 : 0; ufoLight.position.copy(ufo.position).y -= .3;
 
@@ -595,8 +768,8 @@ function update(dt, time) {
       if (k >= 1) { u.state = 'stuck'; cm.attach(b); } }
     else b.scale.setScalar(1 + .07 * Math.sin(time * 5 + u.phase));
   }
-  for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.life -= dt; p.v.y -= 2 * dt;
-    p.m.position.addScaledVector(p.v, dt); p.m.scale.setScalar(Math.max(p.life / .5, .01));
+  for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.life -= dt; p.v.y -= (p.g ?? 2) * dt;
+    p.m.position.addScaledVector(p.v, dt); p.m.scale.setScalar(Math.max(p.life / (p.max ?? .5), .01) * (p.sz ?? 1));
     if (p.life <= 0) { world.remove(p.m); parts.splice(i, 1); } }
 
   const show = state === 'menu' || ((state === 'won' || state === 'lost') && endReady);
@@ -614,8 +787,8 @@ renderer.domElement.addEventListener('click', e => {
   ray.setFromCamera(new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
   const bh = ray.intersectObjects(uiButtons.filter(shown), true)[0];
   if (bh) { let o = bh.object; while (o && !o.userData.press) o = o.parent; if (o && pressUI(o)) return; }
-  const hit = ray.intersectObjects(bubbles.map(b => b.children[0]))[0];
-  if (hit && state === 'playing') pop(hit.object.parent);
+  const hit = ray.intersectObjects([...bubbles, ...cubes].map(b => b.children[0]))[0];
+  if (hit && state === 'playing') { const o = hit.object.parent; o.userData.kind === 'cube' ? hitCube(o) : pop(o); }
 });
 renderer.xr.addEventListener('sessionstart', () => { orbit.enabled = false; audio(); motionBtn.style.display = 'none'; orbitUI.style.display = 'none'; });
 renderer.xr.addEventListener('sessionend', () => { orbit.enabled = !gyroOn; });
@@ -682,15 +855,16 @@ function doExit() {                                                             
 }
 const $ = id => document.getElementById(id);
 $('exitBtn').addEventListener('click', exitGame);
+$('fact').addEventListener('click', () => { $('fact').style.display = 'none'; });
 for (const id of ['titleStart', 'playBtn']) $(id).addEventListener('click', () => { audio(); startGame(); });
 const BAR = { arriving: '🛸 ', won: '🎉 SAVED! ', lost: '💀 ABDUCTED! ' }; let domKey = '';
 function syncDom() {                                                   // title card + one-line bar for phone / desktop
   const xr = renderer.xr.isPresenting, end = state === 'won' || state === 'lost';
-  const key = `${xr}|${state}|${smashed}|${bubbles.length}|${endReady}`; if (key === domKey) return; domKey = key;
+  const key = `${xr}|${state}|${smashed}|${bubbles.length}|${endReady}|${score}|${flashMsg}`; if (key === domKey) return; domKey = key;
   $('title').style.display = state === 'menu' && !xr ? 'flex' : 'none';
   $('bar').style.display = xr ? 'none' : 'flex';
   const pb = $('playBtn'); pb.style.display = state === 'menu' || (end && endReady) ? '' : 'none'; pb.textContent = state === 'menu' ? 'START' : 'PLAY AGAIN';
-  $('barTxt').textContent = `${BAR[state] || ''}🎯 ${smashed}/${CFG.winAt}  👾 ${bubbles.length}/${CFG.loseAt}`;
+  $('barTxt').textContent = `${BAR[state] || ''}${flashMsg ? flashMsg + ' · ' : ''}🎯 ${smashed}/${CFG.winAt}  👾 ${bubbles.length}/${CFG.loseAt}  ⭐ ${score}`;
 }
 $('musicBtn').addEventListener('click', () => toggleMusic());
 

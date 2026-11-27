@@ -1,6 +1,6 @@
 # Save Charminar – VR Bubble Smash (WebXR)
 
-A giant UFO hovers over Charminar and fires bubble aliens onto it. Smash **70** to win.
+A giant UFO hovers over Charminar and fires **red spiky aliens** onto it. Smash **70** to win.
 If **100** are alive on the monument, the UFO abducts Charminar.
 
 It is night: starry sky, moon, floodlit Charminar and lit windows. You are tiny: Charminar, the UFO and the aliens are **10× bigger than you**, and you stand 15 m back.
@@ -17,6 +17,16 @@ Missing models are replaced by simple placeholders, and any load error is printe
 ## Host on GitHub Pages
 1. Upload everything (keep `models/`). 2. Settings → Pages → `main` / root.
 3. Open `https://<user>.github.io/<repo>/` in the Meta Quest Browser and tap **ENTER VR**.
+
+## Blue cubes, chests and score
+Every 14–22 seconds the UFO releases a smooth **blue cube** that hovers in front of Charminar for ~9 s. Shoot it to open a chest lying on the ground (the lid swings open 120°):
+1. **Left chest – knowledge.** A glowing hologram of Charminar and a fact card appear (first fact: built in 1591 by Muhammad Quli Qutb Shah, “four minarets”, granite and lime mortar, moved from Golconda). Later opens show facts on Laad Bazaar, the City of Pearls, Bathukamma and Golconda. On phone/desktop the fact is also shown at the top of the screen (tap to dismiss).
+2. **Right chest – Bathukamma treasure.** Flower-shaped Bathukamma blooms, pearls and lac bangles spill out and fly to you for bonus points.
+
+Cubes alternate between the two chests. Blue cubes are *not* aliens: they never count toward the 100 limit.
+
+**Score:** alien +10 · blue cube +50 · Bathukamma flower +30 · bangle +20 · pearl +10. (Winning still needs 70 aliens smashed.)
+Edit the facts in the `FACTS` list in `index.html`.
 
 ## Controls
 **Quest 3 (controllers or hand tracking)**
