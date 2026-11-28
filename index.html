@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Save Charminar – VR Bubble Smash</title>
+<link href="https://fonts.googleapis.com/css2?family=Bangers&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   html,body{margin:0;height:100%;background:#8ccbff;overflow:hidden;font-family:system-ui,sans-serif;color:#fff}
@@ -14,16 +15,30 @@
   #bar button:disabled{opacity:.5}
   #playBtn{background:#2e9e5b!important}
   #exitBtn{background:#d32f2f!important}
-  #title{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(3,6,20,.6);z-index:20}
-  #title .card{max-width:520px;margin:16px;padding:22px 24px;border-radius:18px;background:#0e1640ee;border:1px solid #5ff6;text-align:center;box-shadow:0 8px 40px #000a}
-  #title h1{margin:0 0 10px;font-size:28px}
-  #title p{margin:6px 0;font-size:15px;line-height:1.4;opacity:.92}
-  #title .hint{font-size:13px;opacity:.75}
-  #titleStart{margin-top:14px;padding:14px 40px;font-size:20px;border:0;border-radius:30px;background:#39ff88;color:#052;font-weight:700}
-  #titleStart:disabled{opacity:.5}
+  #title{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;overflow-y:auto;background:radial-gradient(circle at 20% 8%,#18286a 0,#070b22 62%);z-index:20;padding:10px 10px 0}
+  #title::before{content:"";position:fixed;inset:0;background-image:radial-gradient(#ffffff16 1.2px,transparent 1.5px);background-size:14px 14px;pointer-events:none}
+  #comicHead{text-align:center;margin:2px 0 10px;position:relative}
+  #comicHead h1{margin:0;font:400 clamp(32px,6vw,58px)/1 Bangers,Impact,system-ui;letter-spacing:2px;color:#ffd34d;text-shadow:3px 3px 0 #c62828,6px 6px 0 #000a}
+  #comicHead p{margin:6px 0 0;font-size:clamp(12px,1.6vw,16px);opacity:.9}
+  /* comic grid: 3 columns (2 rows) on laptops, 2 columns on phones, 6 across on very wide screens. Force 6 across: --cols:6 */
+  #grid{--cols:3;display:grid;grid-template-columns:repeat(var(--cols),1fr);gap:14px;width:min(96vw,1180px);position:relative}
+  @media (min-width:1600px){#grid{--cols:6;width:min(98vw,1900px)}}
+  @media (max-width:700px){#grid{--cols:2;gap:9px}}
+  .panel{position:relative;aspect-ratio:1000/773;border:3px dashed #ffffff30;border-radius:6px;background:#0a1030aa;display:flex;align-items:center;justify-content:center;color:#ffffff38;font:400 clamp(30px,5vw,56px) Bangers,Impact,system-ui;margin:0}
+  .panel .in{position:absolute;inset:-3px;border:4px solid #fff;outline:3px solid #000;background:#000;opacity:0;transform:scale(.4) rotate(-6deg);transition:opacity .35s,transform .6s cubic-bezier(.2,1.6,.4,1);overflow:hidden;box-shadow:6px 6px 0 #000a}
+  .panel.show .in{opacity:1;transform:scale(1) rotate(var(--tilt,0deg))}
+  .panel.show{color:transparent;border-color:transparent}
+  .panel img{width:100%;height:100%;object-fit:cover;display:block}
+  .panel.noimg .in{background:linear-gradient(135deg,#1c3a8a,#6a1b9a)}
+  .panel figcaption{position:absolute;left:0;right:0;bottom:0;padding:6px 9px;background:#ffd34df0;color:#111;font:400 clamp(13px,1.55vw,19px)/1.15 Bangers,Impact,system-ui;letter-spacing:.5px;border-top:3px solid #000}
+  .panel .no{position:absolute;top:6px;left:6px;width:28px;height:28px;border-radius:50%;background:#c62828;color:#fff;font:400 18px/28px Bangers,Impact,system-ui;text-align:center;border:2px solid #fff;z-index:2}
+  #comicFoot{position:sticky;bottom:0;width:100%;margin-top:auto;padding:10px 0 78px;text-align:center;background:linear-gradient(transparent,#070b22 35%)}
+  #comicHint{margin:0 0 8px;font-size:12px;opacity:.8}
+  #titleStart{padding:14px 58px;font:400 30px Bangers,Impact,system-ui;letter-spacing:2px;border:0;border-radius:36px;background:#39ff88;color:#052;box-shadow:0 4px 0 #1b8a4a,0 8px 24px #000a;cursor:pointer}
+  #titleStart:disabled{opacity:.55}
   #fact{position:fixed;top:44px;left:50%;transform:translateX(-50%);display:none;width:min(92vw,480px);padding:12px 16px;border-radius:14px;background:#0e1640ee;border:2px solid #ffd34d;color:#fff;font-size:15px;line-height:1.4;z-index:22;box-shadow:0 6px 30px #000a}
   #fact b{display:block;color:#ffd34d;font-size:17px;margin-bottom:4px}
-  #status{position:fixed;top:6px;left:8px;right:8px;text-align:left;font-size:11px;opacity:.55;pointer-events:none;z-index:5}
+  #status{position:fixed;top:6px;left:8px;right:8px;text-align:left;font-size:11px;opacity:.55;pointer-events:none;z-index:40}
 </style>
 <script type="importmap">
 {"imports":{
@@ -34,14 +49,12 @@
 </script>
 </head>
 <body>
-<div id="title"><div class="card">
-  <h1>🛸 Save Charminar!</h1>
-  <p>Aliens are sticking to Charminar! Smash <b>70</b> of them before <b>100</b> cover it – or the UFO takes Charminar away.</p>
-  <p>🟦 Shoot the <b>blue cubes</b> to open treasure chests – learn about Charminar and win Bathukamma flowers, pearls &amp; bangles for bonus points!</p>
-  <p class="hint">🥽 Quest 3: tap <b>ENTER VR</b>. Right hand = shotgun (trigger / pinch). Left hand = grab &amp; sweep sideways to spin Charminar.<br>
-  📱 Phone: tap <b>Enable motion sensor</b>, look around, ◀ ▶ to walk, tap aliens.<br>🖥️ Desktop: drag to look around, click aliens.</p>
-  <button id="titleStart" disabled>Loading…</button>
-</div></div>
+<div id="title">
+  <div id="comicHead"><h1>SAVE CHARMINAR!</h1><p>Aliens want to steal our Charminar. Smash <b>70</b> of them before <b>100</b> cover it – and shoot the <b>blue cubes</b> to open the heritage chests!</p></div>
+  <div id="grid"></div>
+  <div id="comicFoot"><p id="comicHint">🥽 Quest 3: tap <b>ENTER VR</b> &nbsp;·&nbsp; 📱 Phone: tap <b>Enable motion sensor</b>, then START &nbsp;·&nbsp; 🖥️ Desktop: drag to look, click aliens</p>
+  <button id="titleStart" disabled>Loading…</button></div>
+</div>
 <div id="status">Loading models…</div>
 <div id="fact"><b id="factTitle"></b><span id="factTxt"></span></div>
 <div id="bar"><span id="barTxt"></span><button id="playBtn" disabled>START</button><button id="musicBtn">🔊</button><button id="exitBtn">✕ Exit</button></div>
@@ -69,6 +82,7 @@ const CFG = {
   chestFile: ['models/chest.glb', 'models/chest.gltf', 'models/chest.fbx'],   // optional: your chest model (copied 4 times)
   chestRot: [0, 0, 0],          // rotate so the chest FRONT faces +Z (e.g. [0,180,0] if it faces the wrong way)
   chestWidth: .24,              // chest size in world units (x10 in metres)
+  chestSplit: .55,              // chest made of ONE mesh? cut it into base + lid at this fraction of its height (0 = off)
   charminarHeight: 1.6,         // metres in VR (kept small so you can reach it)
   charminarPos: new THREE.Vector3(0, 0, 0),   // centre of the scaled world
   worldScale: 10,               // Charminar / UFO / aliens are 10x bigger than the player
@@ -81,6 +95,29 @@ const CFG = {
   gunHand: 'right',             // which hand holds the shotgun ('left' for left-handers)
   frontArc: 115                 // degrees either side of the front where bubbles may stick
 };
+
+/* ───────────── Comic intro story (edit the order / captions / file names here) ───────────── */
+const COMIC = [
+  { img: 'images/story-5.jpg', cap: 'Hyderabad, the near future. A strange ship appears above the city…' },
+  { img: 'images/story-3.jpg', cap: 'They’ve come for CHARMINAR! The aliens’ beam is lifting our 1591 monument into the sky!' },
+  { img: 'images/story-2.jpg', cap: 'One brave hero refuses to let our heritage go.' },
+  { img: 'images/story-1.jpg', cap: 'Take aim and BURST the red alien bubbles before they cover Charminar!' },
+  { img: 'images/story-4.jpg', cap: 'Shoot the blue cubes to unlock chests that tell Charminar’s story.' },
+  { img: 'images/story-6.jpg', cap: 'Collect the flowers, pearls and lac bangles – the heritage treasures!' }
+];
+(function buildComicDom() {                                  // phone / desktop: the six panels pop into the grid one by one
+  const grid = document.getElementById('grid');
+  COMIC.forEach((p, i) => {
+    const f = document.createElement('figure'); f.className = 'panel'; f.textContent = i + 1; f.style.setProperty('--tilt', (i % 2 ? 1 : -1) * (.4 + (i % 3) * .3) + 'deg');
+    const box = document.createElement('div'); box.className = 'in';
+    const img = new Image(); img.alt = p.cap; img.src = p.img; img.onerror = () => f.classList.add('noimg');
+    const no = document.createElement('span'); no.className = 'no'; no.textContent = i + 1;
+    const cap = document.createElement('figcaption'); cap.textContent = p.cap;
+    box.append(img, no, cap); f.appendChild(box); grid.appendChild(f);
+    const ready = img.decode ? img.decode().catch(() => {}) : Promise.resolve();
+    Promise.all([ready, new Promise(r => setTimeout(r, 700 + i * 1400))]).then(() => f.classList.add('show'));
+  });
+})();
 
 /* ───────────── Renderer / scene ───────────── */
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -222,7 +259,7 @@ async function loadModel(urls, optional = false) {
       console.log('Loaded', url); return m;
     } catch (e) { errs.push(`${url}: ${e?.message || e}`); console.warn('Could not load', url, e); }
   }
-  if (!optional) loadErrors.push(...errs); return null;
+  loadErrors.push(...(optional ? errs.filter(e => !/404|Not Found/i.test(e)) : errs)); return null;
 }
 const rot = (o, r) => o.rotation.set(...r.map(d => THREE.MathUtils.degToRad(d)));
 
@@ -559,6 +596,27 @@ function prepareChest(tmpl) {                                // tmpl is already 
   const lb = new THREE.Box3().setFromObject(lid);
   return { path: pathTo(tmpl, lid), hinge: new THREE.Vector3((lb.min.x + lb.max.x) / 2, lb.min.y, lb.min.z), top: all.max.y };
 }
+function splitSingleMesh(tmpl, frac) {                       // a chest made of ONE mesh: cut it into base + lid at a height
+  const ms = []; tmpl.traverse(o => { if (o.isMesh && !o.isSkinnedMesh) ms.push(o); });
+  if (ms.length !== 1) return false;
+  tmpl.updateMatrixWorld(true);
+  const mesh = ms[0], box = new THREE.Box3().setFromObject(tmpl), cut = box.min.y + (box.max.y - box.min.y) * frac;
+  const g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry, pos = g.attributes.position, mw = mesh.matrixWorld, v = new THREE.Vector3();
+  const groups = g.groups.length ? g.groups : [{ start: 0, count: pos.count, materialIndex: 0 }], side = [new Map(), new Map()];
+  for (const gr of groups) for (let t = gr.start / 3; t < (gr.start + gr.count) / 3; t++) {
+    let cy = 0; for (let k = 0; k < 3; k++) cy += v.fromBufferAttribute(pos, t * 3 + k).applyMatrix4(mw).y;
+    const mp = side[cy / 3 > cut ? 1 : 0], key = gr.materialIndex ?? 0; if (!mp.has(key)) mp.set(key, []); mp.get(key).push(t);
+  }
+  if (!side[0].size || !side[1].size) return false;
+  const build = mp => {
+    const order = [...mp.keys()].sort((a, b) => a - b), tris = order.flatMap(k => mp.get(k)), ng = new THREE.BufferGeometry();
+    for (const [name, at] of Object.entries(g.attributes)) { if (at.isInterleavedBufferAttribute) continue; const n = at.itemSize, arr = new at.array.constructor(tris.length * 3 * n);
+      tris.forEach((t, i) => arr.set(at.array.subarray(t * 3 * n, t * 3 * n + 3 * n), i * 3 * n)); ng.setAttribute(name, new THREE.BufferAttribute(arr, n, at.normalized)); }
+    let st = 0; for (const k of order) { const c = mp.get(k).length * 3; ng.addGroup(st, c, k); st += c; }
+    return ng; };
+  const mk = (mp, name) => { const m = new THREE.Mesh(build(mp), mesh.material); m.name = name; m.position.copy(mesh.position); m.quaternion.copy(mesh.quaternion); m.scale.copy(mesh.scale); return m; };
+  const parent = mesh.parent; parent.remove(mesh); parent.add(mk(side[0], 'Chest_Base'), mk(side[1], 'Lid_split')); return true;
+}
 function skinChest(ch, tmpl, info) {
   const u = ch.userData;
   for (const c of [...ch.children]) if (c !== holo) ch.remove(c);                    // drop the built-in parts
@@ -717,15 +775,32 @@ const exitB = makeButton('EXIT', 0xff4444, .035, -.58, 0, .22), btn = makeButton
 btn.userData.press = () => { audio(); startGame(); };
 exitB.userData.press = () => doExit();
 musicB.userData.press = () => toggleMusic();
-// title card (VR): instructions + START, shown in the menu and hidden once the game starts
-const titleC = Object.assign(document.createElement('canvas'), { width: 1024, height: 640 }), titleTex = new THREE.CanvasTexture(titleC); titleTex.colorSpace = THREE.SRGBColorSpace;
-{ const c = titleC.getContext('2d'); c.fillStyle = 'rgba(10,16,52,.94)'; c.beginPath(); c.roundRect(6, 6, 1012, 628, 48); c.fill(); c.strokeStyle = '#5ff'; c.lineWidth = 6; c.stroke();
-  c.fillStyle = '#fff'; c.textAlign = 'center'; c.font = 'bold 72px system-ui'; c.fillText('Save Charminar!', 512, 110); c.font = '38px system-ui';
-  ['Aliens are sticking to Charminar!', 'Smash 70 of them before 100 cover it.', 'Right hand: shotgun (trigger / pinch).', 'Left hand: grab + sweep to spin Charminar.', 'Shoot blue cubes: chests = facts + bonus!']
-    .forEach((l, i) => c.fillText(l, 512, 185 + i * 54)); titleTex.needsUpdate = true; }
+// title card (VR): the comic story wall – six panels pop in one by one, START underneath
 const titleCard = new THREE.Group(); scene.add(titleCard); titleCard.visible = false;
-titleCard.add(new THREE.Mesh(new THREE.PlaneGeometry(1.5, .94), new THREE.MeshBasicMaterial({ map: titleTex, toneMapped: false, transparent: true })));
-const startCard = makeButton('START', 0x39ff88, .08, 0, -.34, .5, titleCard);
+const PW = .62, PH = PW * 773 / 1000, CAP = .11, GAP = .03, panels3d = [], texLoader = new THREE.TextureLoader(); let titleT = 0;
+const canvasTex = (w, h, draw) => { const c = Object.assign(document.createElement('canvas'), { width: w, height: h }); draw(c.getContext('2d')); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
+{
+  const Hh = PH + CAP, rowH = Hh + GAP, x0 = -(PW + GAP), y0 = rowH / 2 + .02;
+  const head = new THREE.Mesh(new THREE.PlaneGeometry(1.4, .18), new THREE.MeshBasicMaterial({ transparent: true, toneMapped: false, map: canvasTex(1024, 131, c => {
+    c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = '96px Bangers, Impact, "Arial Black", system-ui'; c.lineWidth = 12; c.strokeStyle = '#000'; c.fillStyle = '#ffd34d';
+    c.strokeText('SAVE CHARMINAR!', 512, 70); c.fillText('SAVE CHARMINAR!', 512, 70); }) }));
+  head.position.set(0, y0 + Hh / 2 + .16, 0); titleCard.add(head);
+  COMIC.forEach((p, i) => {
+    const pg = new THREE.Group(); pg.position.set(x0 + (i % 3) * (PW + GAP), y0 - (i / 3 | 0) * rowH, 0); pg.visible = false; pg.scale.setScalar(.001);
+    const plane = (w, h, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); m.position.set(x, y, z); pg.add(m); return m; };
+    plane(PW + .03, Hh + .03, new THREE.MeshBasicMaterial({ color: 0x000000 }), 0, 0, -.004);          // black outline
+    plane(PW + .016, Hh + .016, new THREE.MeshBasicMaterial({ color: 0xffffff }), 0, 0, -.002);        // white comic border
+    const imgMat = new THREE.MeshBasicMaterial({ color: 0x24407a, toneMapped: false });
+    plane(PW, PH, imgMat, 0, CAP / 2, 0);
+    texLoader.load(p.img, t => { t.colorSpace = THREE.SRGBColorSpace; imgMat.map = t; imgMat.color.set(0xffffff); imgMat.needsUpdate = true; });
+    plane(PW, CAP, new THREE.MeshBasicMaterial({ toneMapped: false, map: canvasTex(640, 114, c => {  // yellow caption box
+      c.fillStyle = '#ffd34d'; c.fillRect(0, 0, 640, 114); c.fillStyle = '#111'; c.font = '30px Bangers, Impact, system-ui'; c.textBaseline = 'alphabetic';
+      let line = '', y = 34; for (const w of ((i + 1) + '. ' + p.cap).split(' ')) { const t = line + w + ' '; if (c.measureText(t).width > 610 && line) { c.fillText(line, 16, y); line = w + ' '; y += 33; } else line = t; }
+      c.fillText(line, 16, y); }) }), 0, -PH / 2, 0);
+    titleCard.add(pg); panels3d.push(pg);
+  });
+}
+const startCard = makeButton('START', 0x39ff88, .08, 0, -.86, .5, titleCard);
 startCard.userData.press = () => { audio(); startGame(); };
 function pressUI(b) { const t = clock.elapsedTime; if (t - (b.userData.last ?? -9) < .6 || ((b === btn || b === startCard) && t < btnReadyAt)) return false; b.userData.last = t; b.userData.press(); return true; }
 let uiPlaced = false, titleShown = false; const V3 = new THREE.Vector3(), V4 = new THREE.Vector3();
@@ -735,9 +810,11 @@ function updateUI(dt) {
   camera.getWorldPosition(V1); camera.getWorldDirection(V2);
   if (titleCard.visible && !titleShown) {                              // title card appears in front of you, then stays put
     V4.set(V2.x, 0, V2.z); if (V4.lengthSq() < 1e-4) V4.set(0, 0, -1); V4.normalize();
-    titleCard.position.set(V1.x + V4.x * 2.2, V1.y, V1.z + V4.z * 2.2); titleCard.lookAt(V1);
+    titleCard.position.set(V1.x + V4.x * 2.7, V1.y - .05, V1.z + V4.z * 2.7); titleCard.lookAt(V1);
   }
   titleShown = titleCard.visible;
+  if (titleCard.visible) { titleT += dt; panels3d.forEach((pg, i) => {                  // panels pop in one by one (with a little overshoot)
+    const k = Math.min(Math.max((titleT - .6 - i * 1.3) / .5, 0), 1), c1 = 1.70158, e = 1 + (c1 + 1) * (k - 1) ** 3 + c1 * (k - 1) ** 2; pg.visible = k > 0; pg.scale.setScalar(k > 0 ? e : .001); }); }
   V3.set(0, -.5, -1.4); camera.localToWorld(V3);                       // score panel: lower part of your view, lazily follows your gaze
   if (!uiPlaced) { ui.position.copy(V3); uiPlaced = true; } else ui.position.lerp(V3, 1 - Math.exp(-5 * dt));
   ui.lookAt(V1);
@@ -906,7 +983,7 @@ function syncDom() {                                                   // title 
   const xr = renderer.xr.isPresenting, end = state === 'won' || state === 'lost';
   const key = `${xr}|${state}|${smashed}|${bubbles.length}|${endReady}|${score}|${flashMsg}`; if (key === domKey) return; domKey = key;
   $('title').style.display = state === 'menu' && !xr ? 'flex' : 'none';
-  $('bar').style.display = xr ? 'none' : 'flex';
+  $('bar').style.display = xr || state === 'menu' ? 'none' : 'flex';
   const pb = $('playBtn'); pb.style.display = state === 'menu' || (end && endReady) ? '' : 'none'; pb.textContent = state === 'menu' ? 'START' : 'PLAY AGAIN';
   $('barTxt').textContent = `${BAR[state] || ''}${flashMsg ? flashMsg + ' · ' : ''}🎯 ${smashed}/${CFG.winAt}  👾 ${bubbles.length}/${CFG.loseAt}  ⭐ ${score}`;
 }
@@ -975,10 +1052,12 @@ renderer.setAnimationLoop(() => { const dt = Math.min(clock.getDelta(), .05); if
   const u = b || fallbackUFO(); rot(u, CFG.ufoRot); ufoBody = fit(u, CFG.ufoWidth, true); ufo.add(ufoBody);
   let chestMsg = 'built-in chests';
   if (chestSrc) {                                           // your chest model: one template, instanced for every chest
-    try { rot(chestSrc, CFG.chestRot); const tmpl = fit(chestSrc, CFG.chestWidth, true), info = prepareChest(tmpl);
-      if (info) { chests.forEach(ch => skinChest(ch, tmpl, info)); holo.position.y = chests[0].userData.top + .06; chestMsg = `Chest model loaded (x${chests.length})`; }
-      else chestMsg = 'Chest model has no separate lid (name the lid object "Lid") – using built-in chests';
-    } catch (e) { console.warn(e); chestMsg = 'Chest model failed (' + (e.message || e) + ') – using built-in chests'; }
+    try { rot(chestSrc, CFG.chestRot); const tmpl = fit(chestSrc, CFG.chestWidth, true); let info = prepareChest(tmpl), how = '';
+      const names = []; tmpl.traverse(o => { if (o !== tmpl && o.name) names.push(o.name); }); console.log('Chest model parts:', names);
+      if (!info && CFG.chestSplit && splitSingleMesh(tmpl, CFG.chestSplit)) { info = prepareChest(tmpl); how = ' (one mesh: lid cut at ' + Math.round(CFG.chestSplit * 100) + '% height)'; }
+      if (info) { chests.forEach(ch => skinChest(ch, tmpl, info)); holo.position.y = chests[0].userData.top + .06; chestMsg = `Chest model loaded (x${chests.length})` + how; }
+      else { chestMsg = 'Chest model found but no separate lid detected – name the lid object "Lid". Parts: ' + (names.slice(0, 8).join(', ') || 'none') + ' – using built-in chests'; loadErrors.push(chestMsg); }
+    } catch (e) { console.warn(e); chestMsg = 'Chest model failed (' + (e.message || e) + ') – using built-in chests'; loadErrors.push(chestMsg); }
   }
   document.getElementById('status').textContent =
     (a ? 'Charminar model loaded' : 'Charminar model not found – using placeholder') + ' · ' + (b ? 'UFO model loaded' : 'UFO model not found – using placeholder') + ' · ' + chestMsg;
